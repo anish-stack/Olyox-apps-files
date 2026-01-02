@@ -1,0 +1,130 @@
+{
+  "expo": {
+    "name": "olyox hotel",
+    "slug": "olyox_hotel",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+
+    "icon": "./assets/icon.png",
+
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.happy-coding.olyox-hotel",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "UIBackgroundModes": ["remote-notification"]
+      }
+    },
+
+    "android": {
+      "package": "com.happy_coding.olyox_hotel",
+      "googleServicesFile": "./google-services.json",
+
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+
+      "permissions": [
+        "POST_NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "WAKE_LOCK"
+      ],
+
+      "notification": {
+        "icon": "./assets/notification-icon.png",
+        "color": "#ffffff"
+      }
+    },
+
+    "notification": {
+      "icon": "./assets/notification-icon.png",
+      "color": "#ffffff",
+      "androidCollapsedTitle": "Olyox Hotel"
+    },
+
+    "plugins": [
+      "expo-secure-store",
+      "expo-font",
+
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#ffffff",
+          "channels": [
+            {
+              "id": "new-booking",
+              "name": "New Booking",
+              "importance": "max",
+              "sound": "new_booking",
+              "vibrationPattern": [0, 300, 300, 300],
+              "lightColor": "#2ecc71",
+              "description": "New hotel booking notifications"
+            },
+            {
+              "id": "booking-update",
+              "name": "Booking Update",
+              "importance": "default",
+              "sound": "booking_update",
+              "description": "Updates or modifications to bookings"
+            },
+            {
+              "id": "booking-cancel",
+              "name": "Booking Cancel",
+              "importance": "max",
+              "sound": "booking_cancel",
+              "vibrationPattern": [0, 500, 500],
+              "lightColor": "#e74c3c",
+              "description": "Booking cancellation alerts"
+            },
+            {
+              "id": "app-update",
+              "name": "App Update",
+              "importance": "low",
+              "sound": "booking_update",
+              "description": "App updates and feature announcements"
+            },
+            {
+              "id": "information",
+              "name": "Information",
+              "importance": "default",
+              "sound": "booking_update",
+              "description": "Hotel information, reminders, notices"
+            },
+            {
+              "id": "other",
+              "name": "Other",
+              "importance": "default",
+              "sound": "booking_update",
+              "description": "Miscellaneous notifications"
+            }
+          ]
+        }
+      ],
+
+      [
+        "@react-native-firebase/app",
+        {
+          "android_package_name": "com.happy_coding.olyox_hotel",
+          "ios_bundle_id": "com.happy-coding.olyox-hotel"
+        }
+      ]
+    ],
+
+    "extra": {
+      "eas": {
+        "projectId": "405d0efb-e9d3-4d5b-8ffb-90ff2f4a0afa"
+      }
+    }
+  }
+}

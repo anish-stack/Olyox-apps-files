@@ -1,0 +1,91 @@
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- 🌐 Network -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- 📍 Location (Foreground only – Play safe) -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <!-- 🎤 Audio (only if actually used, else remove) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- 📳 Haptics -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- 🔗 Open HTTPS links -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".MainApplication"
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:allowBackup="true"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme"
+        android:enableOnBackInvokedCallback="false"
+        android:fullBackupContent="@xml/secure_store_backup_rules"
+        android:dataExtractionRules="@xml/secure_store_data_extraction_rules"
+        tools:targetApi="33">
+
+        <!-- 🗺 Google Maps API -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8" />
+
+        <!-- 🚫 Expo OTA Updates Disabled -->
+        <meta-data
+            android:name="expo.modules.updates.ENABLED"
+            android:value="false" />
+
+        <meta-data
+            android:name="expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH"
+            android:value="ALWAYS" />
+
+        <meta-data
+            android:name="expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS"
+            android:value="0" />
+
+        <!-- 🚀 Main Activity -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.App.SplashScreen"
+            android:screenOrientation="portrait">
+
+            <!-- App Launcher -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Deep Link -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="exp+olyox-tiffins-app" />
+            </intent-filter>
+
+        </activity>
+
+        <!-- Legacy HTTP (Optional) -->
+        <uses-library
+            android:name="org.apache.http.legacy"
+            android:required="false" />
+
+    </application>
+
+</manifest>

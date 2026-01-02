@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Save this file as: android/app/src/main/res/layout/floating_widget_icon.xml -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content">
+
+    <ImageView
+        android:id="@+id/floating_icon"
+        android:layout_width="60dp"
+        android:layout_height="60dp"
+        android:src="@mipmap/ic_launcher"
+        android:background="@drawable/floating_icon_background"
+        android:elevation="8dp"
+        android:padding="8dp"
+        android:scaleType="centerInside"
+        android:contentDescription="Floating Widget Icon" />
+
+</FrameLayout>

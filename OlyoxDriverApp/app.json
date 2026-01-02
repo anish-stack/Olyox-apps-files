@@ -1,0 +1,122 @@
+{
+  "expo": {
+    "name": "Olyox Driver App",
+    "slug": "Olyox-Driver-App",
+    "version": "1.0.5",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon_.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/ic_launcher-web.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.olyoxpvt.OlyoxDriverApp",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "We use your location to show your real-time position on the map and provide navigation.",
+        "NSLocationAlwaysUsageDescription": "We use your location in the background to keep tracking your trips and provide accurate service.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "We need access to your location even when the app is closed or not in use to continue trip tracking.",
+        "UNUserNotificationCenterUsageDescription": "We use notifications to alert you about ride requests, trip updates, and important account information.",
+        "UIBackgroundModes": ["fetch", "processing"],
+        "NSCameraUsageDescription": "Allow Olyox Driver App to access your camera for verification and profile purposes.",
+        "NSMicrophoneUsageDescription": "Allow Olyox Driver App to access your microphone for ride communication.",
+        "NSPhotoLibraryUsageDescription": "Allow Olyox Driver App to access your photos for uploading documents or profile images.",
+        "NSPhotoLibraryAddUsageDescription": "Allow Olyox Driver App to save photos locally if needed."
+      }
+    },
+    "android": {
+      "package": "com.olyoxpvt.OlyoxDriverApp",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/logo.png",
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "POST_NOTIFICATIONS",
+        "SCHEDULE_EXACT_ALARM",
+        "RECEIVE_BOOT_COMPLETED",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "WAKE_LOCK",
+        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "VIBRATE",
+        "USE_FULL_SCREEN_INTENT",
+        "SYSTEM_ALERT_WINDOW"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8"
+        }
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "favicon": "./assets/images/playstore-icon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon_.png",
+          "color": "#000",
+          "defaultChannel": "ride_updates",
+          "enableBackgroundRemoteNotifications": true,
+          "sounds": [
+            "./assets/sounds/sound.mp3",
+            "./assets/sounds/app_notification_sound.mp3",
+            "./assets/sounds/message.mp3",
+            "./assets/sounds/ride_cancel_sound.mp3",
+            "./assets/sounds/coin_sound.mp3"
+          ],
+          "channels": [
+            { "id": "ride_request_channel", "name": "Ride Coming", "description": "Notifications when a ride request is coming", "importance": "MAX", "sound": "sound.mp3" },
+            { "id": "chat_channel", "name": "Chat & Messages", "description": "Notifications for chats and messages", "importance": "HIGH", "sound": "message.mp3" },
+            { "id": "ride_accept", "name": "Ride Accepted", "description": "Notifications when a ride is accepted", "importance": "HIGH", "sound": "app_notification_sound.mp3" },
+            { "id": "decline", "name": "Ride Declined", "description": "Notifications when a ride is declined", "importance": "HIGH", "sound": "ride_cancel_sound.mp3" },
+            { "id": "another_driver_accept", "name": "Ride Declined", "description": "Notifications when a ride is declined", "importance": "HIGH", "sound": "ride_cancel_sound.mp3" },
+            { "id": "ride_cancel_channel", "name": "Ride Cancelled", "description": "Notifications when a ride is cancelled", "importance": "HIGH", "sound": "ride_cancel_sound.mp3" },
+            { "id": "ride_updates", "name": "Ride Updates", "description": "General updates about rides", "importance": "HIGH", "sound": "app_notification_sound.mp3" },
+            { "id": "payment_complete_channel", "name": "Earnings", "description": "Notifications about driver earnings", "importance": "HIGH", "sound": "coin_sound.mp3" },
+            { "id": "app_notification_channel", "name": "Promotions", "description": "Promotional notifications", "importance": "HIGH", "sound": "app_notification_sound.mp3" }
+          ]
+        }
+      ],
+      "expo-audio",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static",
+            "deploymentTarget": "15.1",
+            "flipper": false,
+            "forceStaticLinking": ["RNFBApp", "RNFBMessaging"]
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "519fe708-11dc-4f94-bc36-be7f66471700"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/519fe708-11dc-4f94-bc36-be7f66471700",
+      "requestHeaders": {
+        "expo-channel-name": "preview-channel-olyox"
+      }
+    }
+  }
+}
