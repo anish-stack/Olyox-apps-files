@@ -32,7 +32,7 @@ export default function AllHotelRooms({navigation}) {
   const fetchHotels = async () => {
     try {
       const response = await fetch(
-        'https://appv2.olyox.com/api/v1/hotels/find-near-by-hotels'
+        'https://www.appv2.olyox.com/api/v1/hotels/find-near-by-hotels'
       );
       const data = await response.json();
       

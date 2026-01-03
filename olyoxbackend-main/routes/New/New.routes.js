@@ -17,6 +17,7 @@ const {
   FindRiderNearByUser,
   riderActionAcceptOrRejectRideVia,
   findMyRideNewMode,
+  changePreSearchRide,
 } = require("../../src/New-Rides-Controller/CreateNewRides");
 const Protect = require("../../middleware/Auth");
 const {
@@ -53,6 +54,7 @@ const { createPostRide,
 const NewRoutes = express.Router();
 
 NewRoutes.post("/new-ride", Protect, NewcreateRequest);
+NewRoutes.post("/new-ride-confirm",Protect,changePreSearchRide)
 NewRoutes.post("/new-ride-fake", NewcreateRequest);
 
 NewRoutes.post("/new-price-calculations", calculateRidePriceForUser);

@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create axios instance with default config
 const api = axios.create({
-  baseURL: 'https://appv2.olyox.com',
+  baseURL: 'https://www.appv2.olyox.com',
   timeout: 10000,
 });
 

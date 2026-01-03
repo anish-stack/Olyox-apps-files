@@ -20,7 +20,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
 import { tokenCache } from '../Auth/cache';
 
-const API_BASE_URL = 'https://appv2.olyox.com/api/v1/hotels';
+const API_BASE_URL = 'https://www.appv2.olyox.com/api/v1/hotels';
 const { width, height } = Dimensions.get('window');
 
 export default function HotelBooking({ route, navigation }) {

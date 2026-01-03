@@ -26,7 +26,7 @@ class RidePoolingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         riderId = intent?.getStringExtra("riderId")
-        baseUrl = intent?.getStringExtra("baseUrl") ?: "https://appv2.olyox.com"
+        baseUrl = intent?.getStringExtra("baseUrl") ?: "https://www.appv2.olyox.com"
 
         Log.d("RidePoolingService", "🚀 Starting pooling service for riderId=$riderId on $baseUrl")
 

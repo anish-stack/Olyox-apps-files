@@ -30,7 +30,7 @@ export default function HotelDetails({ route, navigation }) {
     const fetchHotelDetails = async () => {
         try {
             const response = await axios.get(
-                `https://appv2.olyox.com/api/v1/hotels/hotel-details/${id}`
+                `https://www.appv2.olyox.com/api/v1/hotels/hotel-details/${id}`
             );
 
             if (response.data.success) {

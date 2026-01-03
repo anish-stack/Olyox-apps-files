@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
     View,
@@ -9,14 +10,12 @@ import {
     Platform,
     Alert,
     ActivityIndicator,
-    SafeAreaView,
     ScrollView,
     StatusBar,
     Dimensions,
     TextInput,
     KeyboardAvoidingView,
     Linking,
-    Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRoute, useNavigation, CommonActions } from "@react-navigation/native";
@@ -27,6 +26,7 @@ import { useRide } from "../context/RideContext";
 import useSettings from "../hooks/Settings";
 import { VCOLORS } from "../constants/colors";
 import * as SecureStore from 'expo-secure-store';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import CashbackModal from "./CashbackModal";
 import { initializeSocket } from "../services/socketService";
 import { useRideChat } from "../hooks/userRideChatHook";
@@ -35,6 +35,9 @@ import { find_me } from '../utils/helpers';
 const { width, height } = Dimensions.get("window");
 const API_BASE_URL = "https://www.appv2.olyox.com";
 const RIDE_NAVIGATION_KEY = 'hasNavigatedToRideStarted';
+const LIGHT_API_INTERVAL = 3000;
+const RETRY_DELAY = 3000;
+const MAX_RETRIES = 2;
 
 const STATUS_CONFIG = {
     driver_assigned: { label: "Driver Assigned", color: "#FF6B35", icon: "car-outline" },
@@ -43,7 +46,7 @@ const STATUS_CONFIG = {
     completed: { label: "Completed", color: "#8BC34A", icon: "flag-outline" },
 };
 
-// Payment Modal
+// ===== PAYMENT MODAL =====
 const PaymentModal = ({ visible, onClose, amount, paymentMethod }) => (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
         <View style={styles.paymentModalOverlay}>
@@ -55,10 +58,7 @@ const PaymentModal = ({ visible, onClose, amount, paymentMethod }) => (
 
                 <View style={styles.paymentDetailsContainer}>
                     <Text style={styles.paymentLabel}>Amount to Pay:</Text>
-                   <Text style={styles.paymentAmount}>
-  ₹{Number(amount ?? 0).toFixed(2)}
-</Text>
-
+                    <Text style={styles.paymentAmount}>₹{Number(amount ?? 0).toFixed(2)}</Text>
                     <Text style={styles.paymentMethodText}>Method: {paymentMethod}</Text>
                 </View>
 
@@ -77,6 +77,64 @@ const PaymentModal = ({ visible, onClose, amount, paymentMethod }) => (
     </Modal>
 );
 
+// ===== CANCEL PAYMENT MODAL =====
+const CancelPaymentModal = ({ visible, onClose, paymentData }) => {
+    if (!paymentData) return null;
+
+    return (
+        <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+            <View style={styles.paymentModalOverlay}>
+                <View style={styles.cancelPaymentModalContent}>
+                    <View style={styles.cancelPaymentHeader}>
+                        <Ionicons name="checkmark-circle" size={48} color="#4CAF50" />
+                        <Text style={styles.cancelPaymentTitle}>Ride Cancelled</Text>
+                    </View>
+
+                    <ScrollView style={styles.cancelPaymentDetails} showsVerticalScrollIndicator={false}>
+                        <Text style={styles.cancelPaymentMessage}>{paymentData.message || "Your ride has been cancelled"}</Text>
+
+                        <View style={styles.cancelPriceBreakdown}>
+                            <View style={styles.cancelPriceRow}>
+                                <Text style={styles.cancelPriceLabel}>Original Fare:</Text>
+                                <Text style={styles.cancelPriceOriginal}>₹{paymentData.original_fare}</Text>
+                            </View>
+
+                            <View style={styles.cancelPriceRow}>
+                                <Text style={styles.cancelPriceLabel}>Distance Travelled:</Text>
+                                <Text style={styles.cancelPriceValue}>{paymentData.distance_travelled_km} km</Text>
+                            </View>
+
+                            <View style={styles.cancelPriceRow}>
+                                <Text style={styles.cancelPriceLabel}>Rate per km:</Text>
+                                <Text style={styles.cancelPriceValue}>₹{paymentData.rate_per_km} ({paymentData.vehicle_type})</Text>
+                            </View>
+
+                            <View style={styles.cancelPriceDivider} />
+
+                            <View style={styles.cancelPriceRow}>
+                                <Text style={styles.cancelPriceTotalLabel}>You Pay:</Text>
+                                <Text style={styles.cancelPriceTotalAmount}>₹{paymentData.new_fare}</Text>
+                            </View>
+{/* 
+                            {paymentData.amount_saved > 0 && (
+                                <View style={styles.savingsContainer}>
+                                    <Ionicons name="trending-down" size={20} color="#4CAF50" />
+                                    <Text style={styles.savingsText}>You saved ₹{paymentData.amount_saved}</Text>
+                                </View>
+                            )} */}
+                        </View>
+                    </ScrollView>
+
+                    <TouchableOpacity style={styles.cancelPaymentOkButton} onPress={onClose}>
+                        <Text style={styles.cancelPaymentOkText}>Got it!</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </Modal>
+    );
+};
+
+// ===== MAIN COMPONENT =====
 export default function OnWayRide() {
     const route = useRoute();
     const { rideId } = route.params || {};
@@ -86,30 +144,14 @@ export default function OnWayRide() {
     const mapRef = useRef(null);
     const flatListRef = useRef(null);
     const { settings } = useSettings();
-    const [currentId, setCurrentId] = useState(null)
+    const lastRequestTimeRef = useRef(0);
+    const navigationDoneRef = useRef(false);
+    const pollIntervalRef = useRef(null);
 
-    useEffect(() => {
-        const fetchLoadRideId = async () => {
-            try {
-                const user = await find_me()
-                if (user?.user?.currentRide) {
-                    setCurrentId(user?.user?.currentRide)
-                    console.log("user?.user?.currentRide", user?.user?.currentRide)
-                } else {
-                    setCurrentId(rideId)
-                }
-            } catch (error) {
-                console.log("Eroor", error)
-            }
-        }
-        fetchLoadRideId()
-    }, [])
-
-    // console.log("OnWayRide currentId:", currentId);
-
-    // === State ===
+    // === STATE ===
+    const [currentId, setCurrentId] = useState(null);
     const [activeRideData, setActiveRideData] = useState(null);
-    const [lightData, setLightData] = useState({}); // For real-time updates
+    const [lightData, setLightData] = useState({});
     const [loading, setLoading] = useState(true);
     const [lightLoading, setLightLoading] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
@@ -124,11 +166,12 @@ export default function OnWayRide() {
     const [openCashbackModal, setOpenCashbackModal] = useState(false);
     const [cashbackAmount, setCashbackAmount] = useState(0);
     const [userInteracted, setUserInteracted] = useState(false);
-    const [shouldAutoFocus, setShouldAutoFocus] = useState(true);
+    const [showCancelPaymentModal, setShowCancelPaymentModal] = useState(false);
+    const [cancelPaymentData, setCancelPaymentData] = useState(null);
 
     const { messages, sendMessage, loading: messagesLoading } = useRideChat(activeRideData?._id, chatModalVisible);
 
-    // === Memoized ===
+    // === MEMOIZED VALUES ===
     const currentStatus = useMemo(() => {
         const status = lightData.ride_status || activeRideData?.ride_status;
         return status ? STATUS_CONFIG[status] : null;
@@ -141,105 +184,145 @@ export default function OnWayRide() {
             : activeRideData?.driver?.location,
     }), [activeRideData?.driver, lightData.driver_location]);
 
-    // === Auto-focus logic ===
-    const getAutoFocusType = useCallback(() => {
-        if (!activeRideData || userInteracted) return null;
-        const status = lightData.ride_status || activeRideData.ride_status;
-        return status === 'driver_assigned' || status === 'driver_arrived'
-            ? 'driver_to_pickup'
-            : status === 'in_progress' ? 'pickup_to_drop' : null;
-    }, [activeRideData, lightData.ride_status, userInteracted]);
+    // === FETCH WITH RETRY & EXPONENTIAL BACKOFF ===
+    const fetchWithRetry = useCallback(async (url, retryCount = 0) => {
+        try {
+            const response = await axios.get(url, { timeout: 8000 });
+            return response.data;
+        } catch (err) {
+            if (err.response?.status === 429 && retryCount < MAX_RETRIES) {
+                const delay = RETRY_DELAY * Math.pow(2, retryCount);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return fetchWithRetry(url, retryCount + 1);
+            }
+            throw err;
+        }
+    }, []);
 
-    // === Light API Call (Every 2s) ===
+    // === LIGHT API (OPTIMIZED) ===
     const handleLightApiCall = useCallback(async () => {
         if (!currentId || !activeRideData) return;
 
+        const now = Date.now();
+        if (now - lastRequestTimeRef.current < 1000) return;
+        lastRequestTimeRef.current = now;
+
         setLightLoading(true);
         try {
-            const { data } = await axios.get(`${API_BASE_URL}/rider-light/${currentId}`, { timeout: 8000 });
-            const { ride_status, driver_location, payment_status, rideId } = data.data || {};
-            console.log("Light API data:", data.data);
+            const data = await fetchWithRetry(`${API_BASE_URL}/rider-light/${currentId}`);
+            const { ride_status, driver_location, payment_status, rideId: respRideId } = data.data || {};
+
             setLightData(prev => ({
-                rideId: rideId || prev.rideId,
+                rideId: respRideId || prev.rideId,
                 ride_status: ride_status || prev.ride_status,
-                driver_location: driver_location || prev.driver_location,
+                driver_location: driver_location?.coordinates || prev.driver_location,
                 payment_status: payment_status || prev.payment_status,
             }));
         } catch (err) {
-            console.warn("Light API failed:", err.message);
+            console.warn("[LightAPI]", err.message);
         } finally {
             setLightLoading(false);
         }
-    }, [currentId, activeRideData]);
+    }, [currentId, activeRideData, fetchWithRetry]);
 
-    // === Full Ride Details (Heavy) with Retry ===
+    // === FULL RIDE DETAILS ===
     const fetchRideDetails = useCallback(async (retryCount = 0) => {
-        if (!currentId) return;
+        if (!currentId || showCancelModal) return;
 
         setLoading(true);
         try {
-            const response = await axios.get(`${API_BASE_URL}/rider/${currentId}`, { timeout: 10000 });
-            if (response.data?.data) {
-                setActiveRideData(response.data.data);
+            const response = await fetchWithRetry(`${API_BASE_URL}/rider/${currentId}`);
+            if (response?.data) {
+                setActiveRideData(response.data);
                 setLightData(prev => ({
-                    ride_status: response.data.data.ride_status,
-                    driver_location: response.data.data.driver?.location?.coordinates,
-                    payment_status: response.data.data.payment_status
+                    ride_status: response.data.ride_status,
+                    driver_location: response.data.driver?.location?.coordinates,
+                    payment_status: response.data.payment_status,
+                    rideId: prev.rideId,
                 }));
             }
+
+            // Handle cancelled ride with recalculation
+            if (response.data?.recalculated_on_cancel) {
+                const pricing = response.data.pricing || {};
+                setCancelPaymentData({
+                    message: "Your ride was cancelled",
+                    original_fare: pricing.original_fare,
+                    new_fare: Number(response.data.rec_total_fare),
+                    distance_travelled_km: Number(response.data.rec_total_distance),
+                    vehicle_type: response.data.vehicle_type,
+                    rate_per_km: pricing.rate_per_km,
+                    amount_saved: pricing.original_fare - Number(response.data.rec_total_fare),
+                });
+                setShowCancelPaymentModal(true);
+            }
         } catch (err) {
-            console.error("Fetch error:", err.message);
-            if (retryCount < 3) {
-                console.log(`Retrying... Attempt ${retryCount + 1}`);
-                setTimeout(() => fetchRideDetails(retryCount + 1), 2000);
-            } else {
-                Alert.alert(
-                    "Connection Error",
-                    "Failed to load ride details after multiple attempts. Please check your internet connection.",
-                    [
-                        { text: "Retry", onPress: () => fetchRideDetails(0) },
-                        { text: "Cancel", style: "cancel" }
-                    ]
-                );
+            console.warn("[FetchRideDetails]", err.message);
+            if (retryCount < MAX_RETRIES && err.response?.status !== 429) {
+                setTimeout(() => fetchRideDetails(retryCount + 1), RETRY_DELAY);
             }
         } finally {
             setLoading(false);
         }
-    }, [currentId]);
+    }, [currentId, showCancelModal, fetchWithRetry]);
 
-    // === Cancel Ride ===
-    const handleCancel = useCallback(async () => {
+    // === LOAD INITIAL RIDE ID ===
+    useEffect(() => {
+        const loadRideId = async () => {
+            try {
+                const user = await find_me();
+                setCurrentId(user?.user?.currentRide || rideId);
+            } catch (error) {
+                console.warn("[LoadRideId]", error);
+                setCurrentId(rideId);
+            }
+        };
+        loadRideId();
+    }, [rideId]);
+
+    // === CANCEL RIDE ===
+    const handleCancelRide = useCallback(async () => {
         if (!selectedReason || !currentId) return;
 
         setCancelling(true);
         try {
-            await axios.post(`${API_BASE_URL}/api/v1/new/ride/cancel`, {
+            const response = await axios.post(`${API_BASE_URL}/api/v1/new/ride/cancel`, {
                 ride: currentId,
                 cancelBy: 'user',
                 reason_id: selectedReason._id,
                 reason: selectedReason.name,
             });
 
+            const paymentDetails = response.data?.payment_details;
+
             await SecureStore.deleteItemAsync(RIDE_NAVIGATION_KEY);
-            Alert.alert("Cancelled", "Ride cancelled successfully", [{
-                text: "OK",
-                onPress: () => {
-                    clearCurrentRide();
-                    navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Home' }] }));
-                },
-            }]);
+            setCancelModal(false);
+
+            if (paymentDetails?.recalculated) {
+                setCancelPaymentData(paymentDetails);
+                setShowCancelPaymentModal(true);
+            } else {
+                Alert.alert("Cancelled", "Ride cancelled successfully", [{
+                    text: "OK",
+                    onPress: () => {
+                        clearCurrentRide();
+                        navigation.dispatch(CommonActions.reset({
+                            index: 0,
+                            routes: [{ name: 'Home' }]
+                        }));
+                    },
+                }]);
+            }
         } catch (err) {
-            Alert.alert("Error", err.response?.data?.message || "Failed to cancel");
+            console.warn("[CancelRide]", err.message);
+            Alert.alert("Error", err.response?.data?.message || "Failed to cancel ride");
         } finally {
             setCancelling(false);
-            setCancelModal(false);
         }
-    }, [selectedReason, currentId, navigation, clearCurrentRide]);
+    }, [selectedReason, currentId, clearCurrentRide, navigation]);
 
-
-
-    // === Chat Send ===
-    const handleSendMessage = async () => {
+    // === SEND MESSAGE ===
+    const handleSendMessage = useCallback(async () => {
         const text = messageText.trim();
         if (!text || !activeRideData?._id || sendingMessage) return;
 
@@ -248,13 +331,13 @@ export default function OnWayRide() {
             await sendMessage(activeRideData._id, "user", text);
             setMessageText("");
         } catch (err) {
-            Alert.alert("Error", "Failed to send message");
+            console.warn("[SendMessage]", err.message);
         } finally {
             setSendingMessage(false);
         }
-    };
+    }, [messageText, activeRideData?._id, sendingMessage, sendMessage]);
 
-    // === Socket Init ===
+    // === INITIALIZE SOCKET ===
     useEffect(() => {
         if (!activeRideData?._id) return;
         initializeSocket({
@@ -264,40 +347,42 @@ export default function OnWayRide() {
         });
     }, [activeRideData?._id]);
 
-    // === Scroll to bottom on new message ===
+    // === AUTO-SCROLL CHAT ===
     useEffect(() => {
         if (messages.length > 0 && chatModalVisible) {
             setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
         }
     }, [messages, chatModalVisible]);
 
-    // === Polling: Light every 2s ===
+    // === LIGHT API POLLING (3s) ===
     useEffect(() => {
-        const interval = setInterval(handleLightApiCall, 2000);
-        return () => clearInterval(interval);
-    }, [handleLightApiCall]);
+        if (!currentId || !activeRideData) return;
 
-    // === Initial Load + Status Change Effects ===
-    useEffect(() => {
-        fetchRideDetails();
-    }, [fetchRideDetails]);
+        pollIntervalRef.current = setInterval(handleLightApiCall, LIGHT_API_INTERVAL);
+        return () => {
+            if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+            }
+        };
+    }, [handleLightApiCall, currentId, activeRideData]);
 
-    // === Status & Payment Logic ===
+    // === INITIAL FETCH ===
     useEffect(() => {
-        if (!activeRideData) return;
+        if (currentId) {
+            fetchRideDetails();
+        }
+    }, [currentId]);
+
+    // === HANDLE STATUS CHANGES ===
+    useEffect(() => {
+        if (!activeRideData || navigationDoneRef.current) return;
 
         const status = lightData.ride_status || activeRideData.ride_status;
         const payment = lightData.payment_status || activeRideData.payment_status;
 
-        // Cancelled
+        // Cancelled (handled via recalculated_on_cancel)
         if (status === 'cancelled') {
-            Alert.alert("Ride Cancelled", "Your ride has been cancelled.", [{
-                text: "OK",
-                onPress: () => {
-                    clearCurrentRide();
-                    navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Home' }] }));
-                },
-            }]);
+            fetchRideDetails();
             return;
         }
 
@@ -309,52 +394,27 @@ export default function OnWayRide() {
 
         // Completed + Paid
         if (status === 'completed' && payment === 'completed') {
-            // Re-fetch to get latest pricing with extra charges
+            navigationDoneRef.current = true;
             fetchRideDetails();
 
-            const hasCashback = activeRideData.isCashbackGet;
-            const amount = activeRideData.cashback;
-
-            if (hasCashback && amount > 0) {
-                setCashbackAmount(amount);
-                setOpenCashbackModal(true);
-            } else {
-                const validRideId = currentId || lightData?.rideId;
-
-                if (validRideId) {
-                    console.log("Navigating to RateRiderOrRide with ID:", validRideId);
-
-                    navigation.dispatch(
-                        CommonActions.reset({
-                            index: 0,
-                            routes: [
-                                {
-                                    name: "RateRiderOrRide",
-                                    params: { rideId: validRideId }
-                                },
-                            ],
-                        })
-                    );
-
-                    // Optional: clear ride after navigation
-                    // clearCurrentRide();
-
+            setTimeout(() => {
+                if (activeRideData.isCashbackGet && activeRideData.cashback > 0) {
+                    setCashbackAmount(activeRideData.cashback);
+                    setOpenCashbackModal(true);
                 } else {
-                    console.warn("⚠️ No valid ride ID found. Cannot navigate.");
-                    Alert.alert("Error", "No valid ride information found.");
+                    const validRideId = currentId || lightData?.rideId || activeRideData?._id;
+                    if (validRideId) {
+                        navigation.dispatch(CommonActions.reset({
+                            index: 0,
+                            routes: [{ name: "RateRiderOrRide", params: { rideId: validRideId } }],
+                        }));
+                    }
                 }
-            }
-
+            }, 500);
         }
-    }, [lightData.ride_status, lightData.payment_status, activeRideData, navigation, clearCurrentRide]);
+    }, [lightData.ride_status, lightData.payment_status, activeRideData, navigation, currentId]);
 
-    // === Map Interaction Reset ===
-    useEffect(() => {
-        setUserInteracted(false);
-        setShouldAutoFocus(true);
-    }, [activeRideData?.ride_status]);
-
-    // === Render Functions ===
+    // === RENDER HEADER ===
     const renderHeader = () => (
         <View style={styles.header}>
             <View style={styles.headerLeft}>
@@ -378,7 +438,6 @@ export default function OnWayRide() {
 
             {showMenu && (
                 <View style={styles.menuDropdown}>
-                    {/* Cancel */}
                     {!['in_progress', 'completed', 'cancelled'].includes(currentStatus?.label?.toLowerCase()) && (
                         <TouchableOpacity
                             style={styles.menuItem}
@@ -386,7 +445,7 @@ export default function OnWayRide() {
                                 setShowMenu(false);
                                 axios.get(`${API_BASE_URL}/api/v1/admin/cancel-reasons?active=active&type=user`)
                                     .then(res => setCancelReasons(res.data.data))
-                                    .catch(() => Alert.alert("Error", "Failed to load reasons"));
+                                    .catch(() => console.warn("[LoadReasons] Failed"));
                                 setCancelModal(true);
                             }}
                         >
@@ -395,7 +454,6 @@ export default function OnWayRide() {
                         </TouchableOpacity>
                     )}
 
-                    {/* Emergency */}
                     <TouchableOpacity style={styles.menuItem} onPress={() => {
                         setShowMenu(false);
                         Linking.openURL("tel:100");
@@ -416,11 +474,9 @@ export default function OnWayRide() {
                         setShowMenu(false);
                         const link = `https://olyox.in/app/share-ride/${activeRideData?._id}`;
                         const msg = `Track my ride: ${link}`;
-                        Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`).catch(() =>
-                            Linking.openURL(`sms:?body=${encodeURIComponent(msg)}`).catch(() =>
-                                Alert.alert("Error", "Cannot share ride")
-                            )
-                        );
+                        Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`)
+                            .catch(() => Linking.openURL(`sms:?body=${encodeURIComponent(msg)}`))
+                            .catch(() => console.warn("[ShareRide] Failed"));
                     }}>
                         <Ionicons name="share-social-outline" size={20} color="#000" />
                         <Text style={styles.menuText}>Share Ride</Text>
@@ -430,6 +486,7 @@ export default function OnWayRide() {
         </View>
     );
 
+    // === RENDER CHAT MODAL ===
     const renderChatModal = () => (
         <Modal visible={chatModalVisible} animationType="slide" transparent>
             <KeyboardAvoidingView style={{ flex: 1, justifyContent: "flex-end" }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
@@ -477,6 +534,7 @@ export default function OnWayRide() {
                         <TextInput
                             style={styles.chatInput}
                             placeholder="Type a message..."
+                            placeholderTextColor="#999"
                             value={messageText}
                             onChangeText={setMessageText}
                             multiline
@@ -495,6 +553,7 @@ export default function OnWayRide() {
         </Modal>
     );
 
+    // === RENDER RIDE DETAILS ===
     const renderRideDetails = () => {
         const pricing = activeRideData?.pricing || {};
         const hasExtraCharges = (pricing.extra_km || 0) > 0 || (pricing.extra_hours || 0) > 0;
@@ -511,7 +570,7 @@ export default function OnWayRide() {
                     <View style={styles.driverInfo}>
                         <Text style={styles.driverName}>{driverInfo?.name || "Driver"}</Text>
                         <Text style={styles.vehicleInfo}>
-                            {driverInfo?.rideVehicleInfo?.vehicleName} • {driverInfo?.rideVehicleInfo?.VehicleNumber}
+                            {driverInfo?.vehicleName || "Vehicle"} • {driverInfo?.VehicleNumber || "N/A"}
                         </Text>
                     </View>
                     <View style={styles.actionButtons}>
@@ -570,14 +629,14 @@ export default function OnWayRide() {
                     <View style={styles.extraChargesCard}>
                         <View style={styles.extraChargesHeader}>
                             <Ionicons name="alert-circle" size={20} color="#f59e0b" />
-                            <Text style={styles.extraChargesTitle}>Additional Charges Applied</Text>
+                            <Text style={styles.extraChargesTitle}>Additional Charges</Text>
                         </View>
 
                         {(pricing.extra_km || 0) > 0 && (
                             <View style={styles.extraChargeRow}>
                                 <View style={styles.extraChargeInfo}>
                                     <Text style={styles.extraChargeLabel}>Extra Distance</Text>
-                                    <Text style={styles.extraChargeDetail}>{pricing.extra_km?.toFixed(1)} km exceeded</Text>
+                                    <Text style={styles.extraChargeDetail}>{pricing.extra_km?.toFixed(1)} km</Text>
                                 </View>
                                 <Text style={styles.extraChargeAmount}>+₹{pricing.extra_km_fare || 0}</Text>
                             </View>
@@ -587,54 +646,43 @@ export default function OnWayRide() {
                             <View style={styles.extraChargeRow}>
                                 <View style={styles.extraChargeInfo}>
                                     <Text style={styles.extraChargeLabel}>Extra Time</Text>
-                                    <Text style={styles.extraChargeDetail}>{pricing.extra_hours?.toFixed(1)} hours exceeded</Text>
+                                    <Text style={styles.extraChargeDetail}>{pricing.extra_hours?.toFixed(1)} hrs</Text>
                                 </View>
                                 <Text style={styles.extraChargeAmount}>+₹{pricing.extra_time_fare || 0}</Text>
-                            </View>
-                        )}
-
-                        {(pricing.total_extra_charges || 0) > 0 && (
-                            <View style={styles.totalExtraRow}>
-                                <Text style={styles.totalExtraLabel}>Total Extra Charges</Text>
-                                <Text style={styles.totalExtraAmount}>+₹{pricing.total_extra_charges}</Text>
                             </View>
                         )}
                     </View>
                 )}
 
                 <View style={styles.fareContainer}>
-               <View style={styles.fareLeft}>
-  {/* Strike-through original fare if applicable */}
-  {(pricing.original_total_fare || 0) > 0 &&
-    pricing.original_total_fare !== pricing.total_fare && (
-      <Text style={styles.originalFare}>₹{pricing.original_total_fare}</Text>
-    )}
+                    <View style={styles.fareLeft}>
+                        {(pricing.original_total_fare || 0) > 0 &&
+                            pricing.original_total_fare !== pricing.total_fare && (
+                                <Text style={styles.originalFare}>₹{pricing.original_total_fare}</Text>
+                            )}
 
-  {pricing?.toll_charge ? (
-    <>
-      {/* Fare excluding toll */}
-      <Text style={styles.fareTitle}>
-        ₹{Number(pricing.total_fare - pricing.toll_charge).toFixed(2)}
-      </Text>
-      {/* Toll amount */}
-      <Text style={styles.tollText}>+ Toll ₹{pricing.toll_charge}</Text>
-      {/* Total fare including toll */}
-      <Text style={styles.totalText}>
-        Total: ₹{Number(pricing.total_fare).toFixed(2)}
-      </Text>
-    </>
-  ) : (
-    <Text style={styles.fareTitle}>
-      ₹{Number(pricing?.total_fare ?? 0).toFixed(2)}
-    </Text>
-  )}
-</View>
+                        {pricing?.toll_charge ? (
+                            <>
+                                <Text style={styles.fareTitle}>
+                                    ₹{Number(pricing.total_fare - pricing.toll_charge).toFixed(2)}
+                                </Text>
+                                <Text style={styles.tollText}>+ Toll ₹{pricing.toll_charge}</Text>
+                                <Text style={styles.totalText}>
+                                    Total: ₹{Number(pricing.total_fare).toFixed(2)}
+                                </Text>
+                            </>
+                        ) : (
+                            <Text style={styles.fareTitle}>
+                                ₹{Number(pricing?.total_fare ?? 0).toFixed(2)}
+                            </Text>
+                        )}
+                    </View>
 
                     <Text style={styles.paymentMethod}>{activeRideData?.payment_method}</Text>
                 </View>
 
                 <Text style={styles.disclaimer}>
-                    Extra charges ( parking, etc.) are not included. Pay driver directly if applicable.
+                    Extra charges not included. Pay driver directly if applicable.
                 </Text>
             </View>
         );
@@ -665,35 +713,40 @@ export default function OnWayRide() {
                     polyline={activeRideData?.route_info?.polyline}
                     DropLocation={activeRideData?.drop_location?.coordinates}
                     rideStatus={lightData.ride_status || activeRideData?.ride_status}
-                    onUserInteraction={() => {
-                        setUserInteracted(true);
-                        setShouldAutoFocus(false);
-                    }}
+                    onUserInteraction={() => setUserInteracted(true)}
                     rideData={activeRideData?.route_info}
-                    autoFocusType={getAutoFocusType()}
-                    shouldAutoFocus={shouldAutoFocus}
+                    autoFocusType={
+                        !userInteracted
+                            ? (lightData.ride_status || activeRideData?.ride_status) === 'driver_assigned' ||
+                              (lightData.ride_status || activeRideData?.ride_status) === 'driver_arrived'
+                                ? 'driver_to_pickup'
+                                : (lightData.ride_status || activeRideData?.ride_status) === 'in_progress'
+                                ? 'pickup_to_drop'
+                                : null
+                            : null
+                    }
+                    shouldAutoFocus={true}
                     platform={Platform.OS}
                 />
             </View>
 
             <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
                 {renderRideDetails()}
-                <View style={{ height: 100 }} />
+                <TouchableOpacity style={styles.helpButton} onPress={() => {
+                    Alert.alert("Emergency Help", "Choose an option:", [
+                        { text: "Police", onPress: () => Linking.openURL("tel:100") },
+                        { text: "Ambulance", onPress: () => Linking.openURL("tel:112") },
+                        { text: "Support", onPress: () => Linking.openURL(`tel:${settings?.support_number || '01141236789'}`) },
+                        { text: "Cancel", style: "cancel" },
+                    ]);
+                }}>
+                    <Ionicons name="shield-checkmark" size={22} color="#fff" />
+                    <Text style={styles.helpButtonText}>Emergency Help</Text>
+                </TouchableOpacity>
+                <View style={{ height: 80 }} />
             </ScrollView>
 
-            <TouchableOpacity style={styles.helpButton} onPress={() => {
-                Alert.alert("Emergency", "Choose help:", [
-                    { text: "Police", onPress: () => Linking.openURL("tel:100") },
-                    { text: "Ambulance", onPress: () => Linking.openURL("tel:112") },
-                    { text: "Support", onPress: () => Linking.openURL(`tel:${settings?.support_number || '01141236789'}`) },
-                    { text: "Cancel", style: "cancel" },
-                ]);
-            }}>
-                <Ionicons name="shield-checkmark" size={22} color="#fff" />
-                <Text style={styles.helpButtonText}>Emergency Help</Text>
-            </TouchableOpacity>
-
-            {lightData?.payment_status === 'pending' && (
+            {showPaymentModal && (
                 <PaymentModal
                     visible={showPaymentModal}
                     onClose={() => {
@@ -705,20 +758,21 @@ export default function OnWayRide() {
                 />
             )}
 
-            <CashbackModal
-                visible={openCashbackModal}
-                onClose={() => {
-                    const validRideId = currentId || lightData?.rideId || activeRideData?._id;
-                    console.log("Navigating to RateRiderOrRide with ID:", validRideId);
-                    setOpenCashbackModal(false);
-                    clearCurrentRide();
-                    navigation.dispatch(CommonActions.reset({
-                        index: 0,
-                        routes: [{ name: "RateRiderOrRide", params: { rideId: validRideId } }],
-                    }));
-                }}
-                amount={cashbackAmount}
-            />
+            {openCashbackModal && (
+                <CashbackModal
+                    visible={openCashbackModal}
+                    onClose={() => {
+                        const validRideId = currentId || lightData?.rideId || activeRideData?._id;
+                        setOpenCashbackModal(false);
+                        clearCurrentRide();
+                        navigation.dispatch(CommonActions.reset({
+                            index: 0,
+                            routes: [{ name: "RateRiderOrRide", params: { rideId: validRideId } }],
+                        }));
+                    }}
+                    amount={cashbackAmount}
+                />
+            )}
 
             {renderChatModal()}
 
@@ -730,6 +784,7 @@ export default function OnWayRide() {
                             <FlatList
                                 data={cancelReasons}
                                 keyExtractor={item => item._id}
+                                scrollEnabled={true}
                                 renderItem={({ item }) => (
                                     <TouchableOpacity
                                         style={[styles.reasonItem, selectedReason?._id === item._id && styles.selectedReason]}
@@ -748,7 +803,7 @@ export default function OnWayRide() {
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     style={[styles.confirmButton, !selectedReason && styles.disabledButton]}
-                                    onPress={handleCancel}
+                                    onPress={handleCancelRide}
                                     disabled={!selectedReason || cancelling}
                                 >
                                     {cancelling ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmButtonText}>Confirm</Text>}
@@ -758,16 +813,30 @@ export default function OnWayRide() {
                     </View>
                 </Modal>
             )}
+
+            {showCancelPaymentModal && (
+                <CancelPaymentModal
+                    visible={showCancelPaymentModal}
+                    onClose={() => {
+                        setShowCancelPaymentModal(false);
+                        clearCurrentRide();
+                        navigation.dispatch(CommonActions.reset({
+                            index: 0,
+                            routes: [{ name: 'Home' }]
+                        }));
+                    }}
+                    paymentData={cancelPaymentData}
+                />
+            )}
         </SafeAreaView>
     );
 }
-
 const styles = StyleSheet.create({
     // Root
     container: {
         flex: 1,
         backgroundColor: "#fff",
-        paddingBottom: Platform.select({ ios: 80, android: 70 }),
+        // paddingBottom: Platform.select({ ios: 80, android: 70 }),
     },
 
     // Loading
@@ -791,7 +860,7 @@ const styles = StyleSheet.create({
         justifyContent: "space-between",
         paddingHorizontal: 16,
         paddingVertical: 14,
-        paddingTop: Platform.OS === "android" ? 20 : 0,
+        // paddingTop: Platform.OS === "android" ? 20 : 0,
         backgroundColor: "#fff",
         borderBottomWidth: 1,
         borderBottomColor: "#eaeaea",
@@ -853,7 +922,7 @@ const styles = StyleSheet.create({
 
     // Map
     mapContainer: {
-        height: height * 0.48,
+        height: height * 0.38,
         backgroundColor: "#f5f5f5",
         overflow: "hidden",
     },
@@ -1170,6 +1239,8 @@ const styles = StyleSheet.create({
 
     // Emergency Help Button
     helpButton: {
+        // paddingBottom:20,
+
         position: "absolute",
         bottom: 20,
         left: 16,
@@ -1518,32 +1589,146 @@ const styles = StyleSheet.create({
         elevation: 0,
     },
     fareLeft: {
-  alignItems: 'flex-start',
-},
+        alignItems: 'flex-start',
+    },
 
-originalFare: {
-  fontSize: 14,
-  color: '#999',
-  textDecorationLine: 'line-through',
-},
+    originalFare: {
+        fontSize: 14,
+        color: '#999',
+        textDecorationLine: 'line-through',
+    },
 
-fareTitle: {
-  fontSize: 18,
-  fontWeight: 'bold',
-  color: '#000',
-},
+    fareTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#000',
+    },
 
-tollText: {
-  fontSize: 14,
-  color: '#555',
-  marginTop: 2,
-},
+    tollText: {
+        fontSize: 14,
+        color: '#555',
+        marginTop: 2,
+    },
 
-totalText: {
-  fontSize: 16,
-  color: '#00aaa9',
-  fontWeight: '600',
-  marginTop: 4,
-},
-
+    totalText: {
+        fontSize: 16,
+        color: '#00aaa9',
+        fontWeight: '600',
+        marginTop: 4,
+    },
+    cancelPaymentModalContent: {
+        backgroundColor: "#fff",
+        borderRadius: 24,
+        padding: 28,
+        width: "92%",
+        maxWidth: 400,
+        alignItems: "center",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
+        elevation: 20,
+    },
+    cancelPaymentHeader: {
+        alignItems: "center",
+        marginBottom: 24,
+    },
+    cancelPaymentTitle: {
+        fontSize: 24,
+        fontWeight: "800",
+        color: "#1a1a1a",
+        marginTop: 12,
+        letterSpacing: -0.3,
+    },
+    cancelPaymentDetails: {
+        width: "100%",
+        marginBottom: 24,
+    },
+    cancelPaymentMessage: {
+        fontSize: 15,
+        color: "#555",
+        textAlign: "center",
+        lineHeight: 22,
+        marginBottom: 20,
+        fontWeight: "500",
+    },
+    cancelPriceBreakdown: {
+        backgroundColor: "#f8f9fa",
+        borderRadius: 16,
+        padding: 18,
+        borderWidth: 1,
+        borderColor: "#eaeaea",
+    },
+    cancelPriceRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        paddingVertical: 10,
+    },
+    cancelPriceLabel: {
+        fontSize: 15,
+        color: "#666",
+        fontWeight: "600",
+    },
+    cancelPriceOriginal: {
+        fontSize: 16,
+        color: "#999",
+        fontWeight: "600",
+        textDecorationLine: "line-through",
+    },
+    cancelPriceValue: {
+        fontSize: 15,
+        color: "#333",
+        fontWeight: "700",
+    },
+    cancelPriceDivider: {
+        height: 1,
+        backgroundColor: "#ddd",
+        marginVertical: 12,
+    },
+    cancelPriceTotalLabel: {
+        fontSize: 18,
+        color: "#1a1a1a",
+        fontWeight: "800",
+    },
+    cancelPriceTotalAmount: {
+        fontSize: 24,
+        color: "#4CAF50",
+        fontWeight: "900",
+    },
+    savingsContainer: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        marginTop: 14,
+        backgroundColor: "#e8f5e9",
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        gap: 8,
+    },
+    savingsText: {
+        fontSize: 15,
+        color: "#2e7d32",
+        fontWeight: "700",
+    },
+    cancelPaymentOkButton: {
+        backgroundColor: "#000",
+        paddingVertical: 16,
+        paddingHorizontal: 48,
+        borderRadius: 28,
+        width: "100%",
+        alignItems: "center",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
+        elevation: 10,
+    },
+    cancelPaymentOkText: {
+        fontSize: 17,
+        fontWeight: "800",
+        color: "#fff",
+        letterSpacing: 0.3,
+    },
 });

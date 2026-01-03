@@ -7,6 +7,59 @@ const directionsCache = new Map();
 const weatherCache = new Map();
 const surgeCache = new Map();
 
+// DYNAMIC STATE-BASED DISCOUNTS CONFIGURATION
+const STATE_BASED_DISCOUNTS = {
+  "rajasthan": {
+    "bike": 30,        // 30% off for bikes in Rajasthan
+    "auto": 15,        // 15% off for autos
+    "sedan": 20,       // 20% off for sedans
+    "suv": 15,         // 15% off for SUVs
+    "default": 10      // Default 10% for other vehicles
+  },
+  "jaipur": {
+    "bike": 30,        // 30% off for bikes in Jaipur
+    "auto": 15,        // 15% off for autos
+    "sedan": 20,       // 20% off for sedans
+    "suv": 15,         // 15% off for SUVs
+    "default": 10      // Default 10% for other vehicles
+  },
+  "haryana": {
+    "bike": 30,        // 30% off for bikes in Haryana
+    "auto": 15,
+    "sedan": 20,
+    "suv": 15,
+    "default": 10
+  },
+  "uttar_pradesh": {
+    "bike": 25,
+    "auto": 12,
+    "sedan": 15,
+    "suv": 12,
+    "default": 8
+  },
+  "delhi": {
+    "bike": 0,
+    "auto": 0,
+    "sedan": 0,
+    "suv": 0,
+    "default": 0
+  },
+  "uttar_pradesh": {
+    "bike": 0,
+    "auto": 0,
+    "sedan": 0,
+    "suv": 0,
+    "default": 0
+  },
+  "default_state": {
+    "bike": 0,
+    "auto": 0,
+    "sedan": 0,
+    "suv": 0,
+    "default": 0
+  }
+};
+
 // Cache cleanup utility
 const cleanupCache = (cache, maxAge = 900000) => {
   const now = Date.now();
@@ -16,6 +69,47 @@ const cleanupCache = (cache, maxAge = 900000) => {
     }
   }
 };
+
+// Get discount percentage based on state and vehicle type
+function getStateBasedDiscount(state, vehicleType) {
+  const normalizedState = (state || "").toLowerCase().trim().replace(/\s+/g, "_");
+  const normalizedVehicle = (vehicleType || "").toLowerCase().trim();
+
+  const stateConfig = STATE_BASED_DISCOUNTS[normalizedState] || STATE_BASED_DISCOUNTS["default_state"];
+  const discount = stateConfig[normalizedVehicle] || stateConfig["default"];
+
+  return discount;
+}
+
+// Detect state from coordinates
+function detectStateFromCoordinates(lat, lng) {
+  // Delhi
+  if (lat >= 28.404 && lat <= 28.8836 && lng >= 76.8388 && lng <= 77.3466) {
+    return "delhi";
+  }
+  
+  // Jaipur (specific coordinates)
+  if (lat >= 26.8 && lat <= 27.2 && lng >= 75.7 && lng <= 75.9) {
+    return "jaipur";
+  }
+  
+  // Haryana (Gurgaon, Faridabad area)
+  if (lat >= 27.5 && lat <= 29.5 && lng >= 75.5 && lng <= 77.5) {
+    return "haryana";
+  }
+  
+  // Rajasthan (broader Rajasthan area, excluding Jaipur)
+  if (lat >= 26.5 && lat <= 28.9 && lng >= 75.0 && lng <= 77.5) {
+    return "rajasthan";
+  }
+  
+  // Uttar Pradesh
+  if (lat >= 25.0 && lat <= 30.0 && lng >= 77.5 && lng <= 84.0) {
+    return "uttar_pradesh";
+  }
+
+  return "default_state";
+}
 
 const JAIPUR_DIRECTION = {
   name: "Jaipur Route Discount",
@@ -31,34 +125,28 @@ const JAIPUR_DIRECTION = {
     { name: "Bawal", lat: 28.085, lng: 76.583 },
     { name: "Shahjahanpur", lat: 27.98, lng: 76.57 },
   ],
-  discountPercent: 10, // 10% off
+  discountPercent: 10,
 };
 
 function isJaipurRoute(origin, destination) {
   const destLat = destination.latitude;
   const destLng = destination.longitude;
 
-  // Quick bounding box check
   if (
     destLat >= JAIPUR_DIRECTION.bounds.minLat &&
     destLat <= JAIPUR_DIRECTION.bounds.maxLat &&
     destLng >= JAIPUR_DIRECTION.bounds.minLng &&
     destLng <= JAIPUR_DIRECTION.bounds.maxLng
   ) {
-    // Additional check: destination is west/south-west of origin (Jaipur direction)
     if (destLng < origin.longitude - 0.1 || destLat < origin.latitude) {
-      console.log(`Jaipur route detected via bounding box`);
       return true;
     }
   }
 
-  // Check if destination is near any key Jaipur highway point
   for (const point of JAIPUR_DIRECTION.keyPoints) {
     const latDiff = Math.abs(destLat - point.lat);
     const lngDiff = Math.abs(destLng - point.lng);
     if (latDiff < 0.15 && lngDiff < 0.15) {
-      // ~15-20km radius
-      console.log(`Jaipur route detected near ${point.name}`);
       return true;
     }
   }
@@ -72,10 +160,10 @@ const SPECIAL_TOLLS = [
     name: "Bijwasan Toll Plaza (Dwarka Expressway)",
     location: { lat: 28.53, lng: 77.04 },
     tollAmount: 320,
-    radius: 0.02, // ~2km radius
+    radius: 0.02,
     description: "Dwarka Expressway connecting Gurgaon to Delhi",
-    vehicleExemptions: ["bike"], // Bikes don't pay this toll
-    priority: 1, // Higher priority = checked first
+    vehicleExemptions: ["bike"],
+    priority: 1,
   },
   {
     id: "kundli_manesar_palwal",
@@ -117,20 +205,8 @@ const SPECIAL_TOLLS = [
     vehicleExemptions: ["bike"],
     priority: 5,
   },
-  // ADD MORE TOLLS HERE - Just copy the structure above!
-  // {
-  //   id: 'your_toll_id',
-  //   name: 'Your Toll Name',
-  //   location: { lat: XX.XXXX, lng: XX.XXXX },
-  //   tollAmount: 200,
-  //   radius: 0.015,
-  //   description: 'Your toll description',
-  //   vehicleExemptions: ['bike'],
-  //   priority: 6
-  // }
 ];
 
-// Dwarka Expressway (Bijwasan Toll Plaza) detection
 const DWARKA_EXPRESSWAY_TOLL = {
   name: "Bijwasan Toll Plaza (Dwarka Expressway)",
   location: { lat: 28.53, lng: 77.04 },
@@ -142,7 +218,6 @@ function checkDwarkaExpressway(origin, destination) {
   const { lat: tollLat, lng: tollLng } = DWARKA_EXPRESSWAY_TOLL.location;
   const { radius } = DWARKA_EXPRESSWAY_TOLL;
 
-  // Check if either origin or destination is near Bijwasan Toll Plaza
   const originNearToll =
     Math.abs(origin.latitude - tollLat) <= radius &&
     Math.abs(origin.longitude - tollLng) <= radius;
@@ -151,7 +226,6 @@ function checkDwarkaExpressway(origin, destination) {
     Math.abs(destination.latitude - tollLat) <= radius &&
     Math.abs(destination.longitude - tollLng) <= radius;
 
-  // Check if route crosses the toll area (basic bounding box check)
   const minLat = Math.min(origin.latitude, destination.latitude);
   const maxLat = Math.max(origin.latitude, destination.latitude);
   const minLng = Math.min(origin.longitude, destination.longitude);
@@ -164,8 +238,6 @@ function checkDwarkaExpressway(origin, destination) {
     maxLng >= tollLng;
 
   if (originNearToll || destNearToll || routeCrossesToll) {
-    console.log(`🛣️  Dwarka Expressway (Bijwasan Toll) detected!`);
-    console.log(`   Toll Plaza Location: ${tollLat}°N, ${tollLng}°E`);
     return true;
   }
 
@@ -181,10 +253,6 @@ const isNightTimeNow = (timezone = "Asia/Kolkata") => {
     ).getHours();
     return currentHour >= 22 || currentHour < 6;
   } catch (error) {
-    console.warn(
-      "⚠️ Error determining timezone, using system time:",
-      error.message
-    );
     const currentHour = new Date().getHours();
     return currentHour >= 22 || currentHour < 6;
   }
@@ -196,7 +264,6 @@ const isPeakHour = (timezone = "Asia/Kolkata") => {
     const currentHour = new Date(
       now.toLocaleString("en-US", { timeZone: timezone })
     ).getHours();
-    // Morning peak: 7-10 AM, Evening peak: 5-9 PM
     return (
       (currentHour >= 7 && currentHour <= 10) ||
       (currentHour >= 17 && currentHour <= 21)
@@ -206,7 +273,7 @@ const isPeakHour = (timezone = "Asia/Kolkata") => {
   }
 };
 
-// City boundary definitions (Complete UP coverage)
+// City boundary definitions
 const CITY_BOUNDARIES = {
   delhi: {
     name: "Delhi",
@@ -223,7 +290,7 @@ const CITY_BOUNDARIES = {
       minLat: 28.4,
       maxLat: 28.55,
       minLng: 76.75,
-      maxLng: 77.11, // Eastern boundary before Delhi
+      maxLng: 77.11,
     },
   },
   noida: {
@@ -231,7 +298,7 @@ const CITY_BOUNDARIES = {
     bounds: {
       minLat: 28.47,
       maxLat: 28.64,
-      minLng: 77.31, // Western boundary after Delhi
+      minLng: 77.31,
       maxLng: 77.5,
     },
   },
@@ -287,6 +354,7 @@ function routeCrossesTollArea(origin, destination, tollLocation, radius) {
     maxLng >= tollLng
   );
 }
+
 function isVehicleExempt(vehicleName, exemptions) {
   if (!exemptions || exemptions.length === 0) return false;
   const normalizedVehicle = (vehicleName || "").toLowerCase().trim();
@@ -296,7 +364,6 @@ function isVehicleExempt(vehicleName, exemptions) {
 }
 
 function checkSpecialTolls(origin, destination, vehicleName = null) {
-  // Sort tolls by priority (lower number = higher priority)
   const sortedTolls = [...SPECIAL_TOLLS].sort(
     (a, b) => a.priority - b.priority
   );
@@ -312,11 +379,9 @@ function checkSpecialTolls(origin, destination, vehicleName = null) {
       id,
     } = toll;
 
-    // Check if origin or destination is near this toll
     const originNearToll = isNearTollPlaza(origin, location, radius);
     const destNearToll = isNearTollPlaza(destination, location, radius);
 
-    // Check if route crosses this toll area
     const routeCrosses = routeCrossesTollArea(
       origin,
       destination,
@@ -325,15 +390,7 @@ function checkSpecialTolls(origin, destination, vehicleName = null) {
     );
 
     if (originNearToll || destNearToll || routeCrosses) {
-      console.log(`🛣️  SPECIAL TOLL DETECTED: ${name}`);
-      console.log(`   ID: ${id}`);
-      console.log(`   Location: ${location.lat}°N, ${location.lng}°E`);
-      console.log(`   Description: ${description}`);
-
-      // Check vehicle exemption
       if (vehicleName && isVehicleExempt(vehicleName, vehicleExemptions)) {
-        console.log(`   🚴 Vehicle "${vehicleName}" is EXEMPT from this toll`);
-        console.log(`   Amount: ₹${tollAmount} → ₹0 (exempted)`);
         return {
           hasTolls: true,
           tollAmount: 0,
@@ -351,7 +408,6 @@ function checkSpecialTolls(origin, destination, vehicleName = null) {
         };
       }
 
-      console.log(`   Amount: ₹${tollAmount}`);
       return {
         hasTolls: true,
         tollAmount: tollAmount,
@@ -368,105 +424,67 @@ function checkSpecialTolls(origin, destination, vehicleName = null) {
     }
   }
 
-  return null; // No special toll found
+  return null;
 }
 
 // Detect city from coordinates (Priority-based detection)
 function detectCity(lat, lng) {
-  console.log(`📍 Checking coordinates: ${lat}, ${lng}`);
-
-  // Check in priority order to avoid overlaps
-  // Priority: Gurgaon -> Noida -> Delhi -> UP
-
-  // Check Gurgaon first (west of Delhi)
   if (
     lat >= CITY_BOUNDARIES.gurgaon.bounds.minLat &&
     lat <= CITY_BOUNDARIES.gurgaon.bounds.maxLat &&
     lng >= CITY_BOUNDARIES.gurgaon.bounds.minLng &&
     lng <= CITY_BOUNDARIES.gurgaon.bounds.maxLng
   ) {
-    console.log(`   ✅ Detected: Gurgaon`);
     return "gurgaon";
   }
 
-  // Check Noida (east of Delhi)
   if (
     lat >= CITY_BOUNDARIES.noida.bounds.minLat &&
     lat <= CITY_BOUNDARIES.noida.bounds.maxLat &&
     lng >= CITY_BOUNDARIES.noida.bounds.minLng &&
     lng <= CITY_BOUNDARIES.noida.bounds.maxLng
   ) {
-    console.log(`   ✅ Detected: Noida`);
     return "noida";
   }
 
-  // Check Delhi (central NCR)
   if (
     lat >= CITY_BOUNDARIES.delhi.bounds.minLat &&
     lat <= CITY_BOUNDARIES.delhi.bounds.maxLat &&
     lng >= CITY_BOUNDARIES.delhi.bounds.minLng &&
     lng <= CITY_BOUNDARIES.delhi.bounds.maxLng
   ) {
-    console.log(`   ✅ Detected: Delhi`);
     return "delhi";
   }
 
-  // Check broader UP region
   if (
     lat >= CITY_BOUNDARIES.up.bounds.minLat &&
     lat <= CITY_BOUNDARIES.up.bounds.maxLat &&
     lng >= CITY_BOUNDARIES.up.bounds.minLng &&
     lng <= CITY_BOUNDARIES.up.bounds.maxLng
   ) {
-    console.log(`   ✅ Detected: UP (Other)`);
     return "up";
   }
 
-  console.log(`   ❌ Location not in NCR region`);
   return null;
 }
 
 function detectTollsForRoute(origin, destination, vehicleName = null) {
-  console.log("\n========== TOLL DETECTION STARTED ==========");
-  console.log("📌 Origin:", origin);
-  console.log("📌 Destination:", destination);
-  console.log("");
-
-  // Check for Dwarka Expressway first (priority check)
   const specialToll = checkSpecialTolls(origin, destination, vehicleName);
 
   if (specialToll) {
-    console.log(
-      `💰 ${specialToll.isExempted ? "TOLL EXEMPTED" : "TOLL APPLIED"}: ${
-        specialToll.tollDetails.route
-      }`
-    );
-    console.log(`   Final Amount: ₹${specialToll.tollAmount}`);
-    console.log("========================================\n");
     return specialToll;
   }
 
   const originCity = detectCity(origin.latitude, origin.longitude);
   const destCity = detectCity(destination.latitude, destination.longitude);
 
-  console.log(
-    `\n🗺️  Route: ${originCity || "Unknown"} → ${destCity || "Unknown"}`
-  );
-  console.log("");
-
   if (!originCity || !destCity) {
-    console.log("⚠️  Cannot detect toll - location outside coverage area");
     return { hasTolls: false, tollAmount: 0, tollDetails: null };
   }
 
-  // Same city = no toll
   if (originCity === destCity) {
-    console.log("✅ Same city travel - No toll");
     return { hasTolls: false, tollAmount: 0, tollDetails: null };
   }
-
-  // DELHI ENTRY TOLLS (Main Logic)
-  // Rule: Toll charged when entering Delhi from any neighboring city
 
   if (destCity === "delhi") {
     let tollAmount = 0;
@@ -484,9 +502,6 @@ function detectTollsForRoute(origin, destination, vehicleName = null) {
     }
 
     if (tollAmount > 0) {
-      console.log(`💰 TOLL DETECTED: ${routeDescription}`);
-      console.log(`   Amount: ₹${tollAmount}`);
-      console.log("========================================\n");
       return {
         hasTolls: true,
         tollAmount: tollAmount,
@@ -499,7 +514,10 @@ function detectTollsForRoute(origin, destination, vehicleName = null) {
       };
     }
   }
+
+  return { hasTolls: false, tollAmount: 0, tollDetails: null };
 }
+
 // Google Maps Directions API with caching
 async function getDirectionsData(origin, destination, cacheKey) {
   try {
@@ -507,11 +525,9 @@ async function getDirectionsData(origin, destination, cacheKey) {
 
     const cached = directionsCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < 900000) {
-      console.log(`✅ [CACHE HIT] Directions: ${cacheKey}`);
       return cached.data;
     }
 
-    console.log(`🌐 [API CALL] Fetching directions from Google Maps...`);
     const originStr = `${origin.latitude},${origin.longitude}`;
     const destinationStr = `${destination.latitude},${destination.longitude}`;
 
@@ -557,11 +573,9 @@ async function getDirectionsData(origin, destination, cacheKey) {
       data: standardizedData,
       timestamp: Date.now(),
     });
-    console.log(`💾 [CACHE SET] Directions cached: ${cacheKey}`);
 
     return standardizedData;
   } catch (error) {
-    console.error("❌ [DIRECTIONS ERROR]:", error.message);
     throw new Error(`Failed to fetch directions: ${error.message}`);
   }
 }
@@ -580,7 +594,6 @@ async function getWeatherCondition(latitude, longitude) {
 
     const apiKey = process.env.OPEN_WEATHER_API_KEY;
     if (!apiKey) {
-      console.warn("⚠️ No weather API key configured");
       return { isRaining: false, condition: "unknown" };
     }
 
@@ -611,39 +624,34 @@ async function getWeatherCondition(latitude, longitude) {
 
     return weatherData;
   } catch (error) {
-    console.warn("⚠️ [WEATHER WARNING]:", error.message);
     return { isRaining: false, condition: "unknown" };
   }
 }
 
-// Dynamic Surge Pricing Calculator (Uber/Ola style)
+// Dynamic Surge Pricing Calculator
 function calculateSurgeMultiplier(options = {}) {
   const {
     isPeakHour = false,
     isNightTime = false,
     isRaining = false,
     distance_km = 0,
-    demandLevel = "normal", // low, normal, high, very_high
+    demandLevel = "normal",
   } = options;
 
   let surgeMultiplier = 1.0;
 
-  // Peak hour surge (7-10 AM, 5-9 PM)
   if (isPeakHour) {
-    surgeMultiplier += 0.3; // 30% increase
+    surgeMultiplier += 0.3;
   }
 
-  // Night time surge (10 PM - 6 AM)
   if (isNightTime) {
-    surgeMultiplier += 0.25; // 25% increase
+    surgeMultiplier += 0.25;
   }
 
-  // Weather-based surge
   if (isRaining) {
-    surgeMultiplier += 0.2; // 20% increase for rain
+    surgeMultiplier += 0.2;
   }
 
-  // Demand-based surge (simulated - in production, fetch from real-time data)
   const demandMultipliers = {
     low: 0,
     normal: 0,
@@ -652,25 +660,19 @@ function calculateSurgeMultiplier(options = {}) {
   };
   surgeMultiplier += demandMultipliers[demandLevel] || 0;
 
-  // Long-distance discount (encourage longer rides)
   if (distance_km > 50) {
-    surgeMultiplier -= 0.1; // 10% discount
+    surgeMultiplier -= 0.1;
   }
 
-  // Cap surge between 1.0x and 3.0x
   surgeMultiplier = Math.max(1.0, Math.min(3.0, surgeMultiplier));
 
   return parseFloat(surgeMultiplier.toFixed(2));
 }
 
-// Calculate fuel surcharge dynamically based on distance and mileage
+// Calculate fuel surcharge dynamically
 function calculateFuelSurcharge(distance_km, vehicle) {
   const { avgMileage, fuelSurchargePerKM } = vehicle;
-
-  // Fuel consumption = distance / mileage
   const fuelConsumed = distance_km / avgMileage;
-
-  // Fuel surcharge = fuel consumed * surcharge per liter
   const fuelSurcharge = fuelConsumed * fuelSurchargePerKM;
 
   return Math.round(fuelSurcharge * 100) / 100;
@@ -679,25 +681,18 @@ function calculateFuelSurcharge(distance_km, vehicle) {
 function calculateTollCharges(distance_km, vehicle, tollInfo) {
   const vehicleName = (vehicle.name || "").toLowerCase().trim();
   if (vehicleName === "bike") {
-    console.log(`🚴 Bike detected - No toll charges applied`);
     return 0;
   }
 
-  // Pehle auto-detected toll check karo
   if (tollInfo.hasTolls && tollInfo.tollAmount > 0) {
-    console.log(`✅ Using auto-detected toll: ₹${tollInfo.tollAmount}`);
     return tollInfo.tollAmount;
   }
 
   if (vehicle.tollExtra && distance_km > 50 && !tollInfo.hasTolls) {
     const fallbackToll = Math.min(200, 50 + (distance_km - 50) * 2);
-    console.log(
-      `📏 Using distance-based toll (no city crossing detected): ₹${fallbackToll}`
-    );
     return fallbackToll;
   }
 
-  // No toll
   return 0;
 }
 
@@ -708,7 +703,8 @@ function calculateVehiclePrice(
   conditions,
   tollInfo,
   origin,
-  destination
+  destination,
+  stateInfo
 ) {
   const {
     distance_km,
@@ -718,7 +714,6 @@ function calculateVehiclePrice(
 
   const { isNightTime, isRaining, isPeakHour, demandLevel } = conditions;
 
-  // Extract vehicle pricing parameters
   const {
     baseFare = 0,
     baseKM = 0,
@@ -729,28 +724,17 @@ function calculateVehiclePrice(
     minFare = 0,
   } = vehicle;
 
-  // 1. Distance cost (only beyond base KM)
   const chargeableDistance = Math.max(0, distance_km - baseKM);
   const distanceCost = chargeableDistance * perKM;
-
-  // 2. Time cost
   const timeCost = traffic_duration_minutes * perMin;
-
-  // 3. Waiting time cost
   const waitingTimeCost = waitingTimeInMinutes * waitingChargePerMin;
-
-  // 4. Night surcharge (percentage on base + distance)
   const nightSurcharge = isNightTime
     ? ((baseFare + distanceCost) * nightPercent) / 100
     : 0;
 
-  // 5. Fuel surcharge (dynamic based on mileage)
   const fuelSurcharge = calculateFuelSurcharge(distance_km, vehicle);
-
-  // 6. Toll charges (auto-detected or distance-based)
   const tollCharges = calculateTollCharges(distance_km, vehicle, tollInfo);
 
-  // 7. Calculate surge multiplier
   const surgeMultiplier = calculateSurgeMultiplier({
     isPeakHour,
     isNightTime,
@@ -758,7 +742,7 @@ function calculateVehiclePrice(
     distance_km,
     demandLevel,
   });
-  // 8. Base price before surge
+
   let basePrice =
     baseFare +
     distanceCost +
@@ -767,14 +751,10 @@ function calculateVehiclePrice(
     nightSurcharge +
     fuelSurcharge;
 
-  // 9. Apply surge multiplier
   let totalPrice = basePrice * surgeMultiplier;
-
-  // 10. Add non-surgeable charges (tolls are fixed)
   totalPrice += tollCharges;
 
-  // 11. Jaipur Route Discount (10% off final fare for Jaipur-bound rides)
-  // 11. Jaipur Route Discount (10% off final fare for Jaipur-bound rides)
+  // JAIPUR ROUTE DISCOUNT
   let jaipurDiscount = 0;
   if (
     origin &&
@@ -784,15 +764,21 @@ function calculateVehiclePrice(
   ) {
     jaipurDiscount = totalPrice * (JAIPUR_DIRECTION.discountPercent / 100);
     totalPrice -= jaipurDiscount;
-    console.log(
-      `Jaipur route discount applied: -₹${jaipurDiscount.toFixed(2)} (${
-        JAIPUR_DIRECTION.discountPercent
-      }%)`
-    );
   }
 
-  // 12. Apply minimum fare
+  // STATE-BASED DYNAMIC DISCOUNT
+  let stateBasedDiscount = 0;
+  const vehicleType = (vehicle.name || "").toLowerCase().trim();
+  const discountPercentage = getStateBasedDiscount(stateInfo.state, vehicleType);
+
+  if (discountPercentage > 0) {
+    // Apply state discount on the fare after surge but before min fare
+    stateBasedDiscount = totalPrice * (discountPercentage / 100);
+    totalPrice -= stateBasedDiscount;
+  }
+
   totalPrice = Math.max(totalPrice, minFare);
+
   return {
     vehicleId: vehicle._id.toString(),
     vehicleName: vehicle.name || "Unknown Vehicle",
@@ -802,7 +788,8 @@ function calculateVehiclePrice(
     distanceInKm: Math.round(distance_km * 100) / 100,
     durationInMinutes: Math.round(traffic_duration_minutes * 100) / 100,
     surgeMultiplier,
-    jaipurDiscount: Math.round(jaipurDiscount * 100) / 100, // ← Add this
+    jaipurDiscount: Math.round(jaipurDiscount * 100) / 100,
+    stateBasedDiscount: Math.round(stateBasedDiscount * 100) / 100,
     pricing: {
       baseFare: Math.round(baseFare * 100) / 100,
       distanceCost: Math.round(distanceCost * 100) / 100,
@@ -812,7 +799,8 @@ function calculateVehiclePrice(
       fuelSurcharge: Math.round(fuelSurcharge * 100) / 100,
       tollCharges: Math.round(tollCharges * 100) / 100,
       surgeAmount: Math.round(basePrice * (surgeMultiplier - 1) * 100) / 100,
-      jaipurDiscount: Math.round(jaipurDiscount * 100) / 100, // ← Add this
+      jaipurDiscount: Math.round(jaipurDiscount * 100) / 100,
+      stateBasedDiscount: Math.round(stateBasedDiscount * 100) / 100,
       priceBeforeSurge: Math.round(basePrice * 100) / 100,
     },
     conditions: {
@@ -826,6 +814,8 @@ function calculateVehiclePrice(
       hasTolls: tollInfo.hasTolls,
       tollDetails: tollInfo.tollDetails,
       jaipurRoute: distance_km > 69 && isJaipurRoute(origin, destination),
+      state: stateInfo.state,
+      stateDiscountPercentage: discountPercentage,
     },
     isRental: false,
   };
@@ -836,27 +826,18 @@ async function calculateRentalPrices(
   traffic_duration_minutes,
   conditions,
   origin,
-  destination
+  destination,
+  stateInfo
 ) {
   try {
     const rentalSettings = await settings.findOne().select("rental");
 
     if (!rentalSettings || !rentalSettings.rental) {
-      console.warn("⚠️ No rental settings found in database");
       return [];
     }
 
-    // Detect tolls for the route
     const tollInfo = detectTollsForRoute(origin, destination);
     const tollCharges = tollInfo.hasTolls ? tollInfo.tollAmount : 0;
-
-    console.log(
-      `💰 Rental Toll Detection: ${
-        tollInfo.hasTolls
-          ? `₹${tollCharges} (${tollInfo.tollDetails.route})`
-          : "No toll"
-      }`
-    );
 
     const rentalVehicles = [];
     const vehicleTypes = ["mini", "sedan", "suv"];
@@ -876,25 +857,25 @@ async function calculateRentalPrices(
         isAvailable,
       } = rentalConfig;
 
-      // Minimum 1-hour charge
       const effectiveMinutes = Math.max(traffic_duration_minutes, 60);
-
-      // Distance breakdown
       const extraKm = Math.max(0, distance_km - fixedKmforBaseFare);
 
-      // Cost calculations
       const extraKmCost = extraKm * pricePerKm;
       const timeCost = effectiveMinutes * pricePerMin;
 
-      // Base price
       let totalPrice = baseFare + extraKmCost + timeCost;
-
-      // Apply minimal surge for rentals
       const rentalSurge = conditions.isPeakHour ? 1.15 : 1.0;
       totalPrice *= rentalSurge;
-
-      // ADD TOLL CHARGES
       totalPrice += tollCharges;
+
+      // RENTAL STATE-BASED DISCOUNT
+      let rentalStateDiscount = 0;
+      const rentalDiscountPercentage = getStateBasedDiscount(stateInfo.state, vehicleType);
+
+      if (rentalDiscountPercentage > 0) {
+        rentalStateDiscount = totalPrice * (rentalDiscountPercentage / 100);
+        totalPrice -= rentalStateDiscount;
+      }
 
       rentalVehicles.push({
         vehicleType: showingName,
@@ -904,6 +885,7 @@ async function calculateRentalPrices(
         distanceInKm: Math.round(distance_km * 100) / 100,
         durationInMinutes: Math.round(effectiveMinutes * 100) / 100,
         surgeMultiplier: rentalSurge,
+        stateBasedDiscount: Math.round(rentalStateDiscount * 100) / 100,
         pricing: {
           baseFare: Math.round(baseFare * 100) / 100,
           baseKmIncluded: fixedKmforBaseFare,
@@ -913,9 +895,10 @@ async function calculateRentalPrices(
           pricePerKm: Math.round(pricePerKm * 100) / 100,
           pricePerMin: Math.round(pricePerMin * 100) / 100,
           tollCharges: Math.round(tollCharges * 100) / 100,
+          stateBasedDiscount: Math.round(rentalStateDiscount * 100) / 100,
           surgeAmount:
             Math.round(
-              (totalPrice - tollCharges - (baseFare + extraKmCost + timeCost)) *
+              (totalPrice - tollCharges - (baseFare + extraKmCost + timeCost) - rentalStateDiscount) *
                 100
             ) / 100,
         },
@@ -928,22 +911,21 @@ async function calculateRentalPrices(
               route: tollInfo.tollDetails?.route || "Auto-detected toll",
             }
           : { hasTolls: false },
+        conditions: {
+          state: stateInfo.state,
+          stateDiscountPercentage: rentalDiscountPercentage,
+        },
       });
     }
 
     rentalVehicles.sort((a, b) => a.totalPrice - b.totalPrice);
-
-    console.log(
-      `✅ Calculated rental prices for ${rentalVehicles.length} vehicle types (with tolls)`
-    );
     return rentalVehicles;
   } catch (error) {
-    console.error("❌ Error calculating rental prices:", error.message);
     return [];
   }
 }
 
-// Main API endpoint - Complete Rewrite with Bike & Auto separate handling
+// Main API endpoint
 exports.calculateRidePriceForUser = async (req, res) => {
   const startTime = performance.now();
 
@@ -957,14 +939,9 @@ exports.calculateRidePriceForUser = async (req, res) => {
       isNightTime,
       timezone = "Asia/Kolkata",
       demandLevel = "normal",
-      hasTolls = false,
     } = req.body;
 
-    console.log("📋 Request Body:", req.body);
-
-    // ============================================
     // STEP 1: Input Validation
-    // ============================================
     if (
       !origin?.latitude ||
       !origin?.longitude ||
@@ -980,7 +957,6 @@ exports.calculateRidePriceForUser = async (req, res) => {
       });
     }
 
-    // Validate coordinate ranges
     if (
       Math.abs(origin.latitude) > 90 ||
       Math.abs(origin.longitude) > 180 ||
@@ -996,30 +972,29 @@ exports.calculateRidePriceForUser = async (req, res) => {
       });
     }
 
-    // ============================================
-    // STEP 2: Route & Toll Detection
-    // ============================================
-    console.log("\n========== ROUTE ANALYSIS ==========");
+    // STEP 2: Detect State for Dynamic Discount
+    const originState = detectStateFromCoordinates(origin.latitude, origin.longitude);
+    const destState = detectStateFromCoordinates(destination.latitude, destination.longitude);
+    const stateInfo = {
+      originState,
+      destState,
+      state: destState || originState || "default_state", // Primary state for discount
+    };
 
-    // Auto-detect tolls based on route
+    // STEP 3: Route & Toll Detection
     const tollInfo = detectTollsForRoute(origin, destination);
 
-    // Auto-detect conditions
     const actualIsNightTime =
       isNightTime !== undefined ? isNightTime : isNightTimeNow(timezone);
     const actualIsPeakHour = isPeakHour(timezone);
 
-    // Create cache keys
     const directionsCacheKey = `directions:${origin.latitude},${origin.longitude}:${destination.latitude},${destination.longitude}`;
-
-    // Get directions data
     const directionsData = await getDirectionsData(
       origin,
       destination,
       directionsCacheKey
     );
 
-    // Get weather condition (non-blocking)
     let weatherData = { isRaining: false, condition: "unknown" };
     try {
       weatherData = await Promise.race([
@@ -1032,12 +1007,11 @@ exports.calculateRidePriceForUser = async (req, res) => {
         ),
       ]);
     } catch (error) {
-      console.warn("⚠️ Weather check failed, proceeding without weather data");
+      // Weather check failed
     }
 
     const { distance_km, traffic_duration_minutes } = directionsData;
 
-    // Validate route data
     if (distance_km <= 0 || traffic_duration_minutes <= 0) {
       return res.status(400).json({
         success: false,
@@ -1048,41 +1022,18 @@ exports.calculateRidePriceForUser = async (req, res) => {
       });
     }
 
-    // ============================================
-    // STEP 3: Ride Type Classification
-    // ============================================
+    // STEP 4: Ride Type Classification
     const isIntercityRide = distance_km > 69;
     const shouldCalculateRentals = distance_km < 69 && !isLater;
 
-    console.log(`\n🚗 RIDE CLASSIFICATION:`);
-    console.log(`   Type: ${isIntercityRide ? "INTERCITY" : "LOCAL"}`);
-    console.log(`   Distance: ${distance_km.toFixed(2)} km`);
-    console.log(`   Duration: ${traffic_duration_minutes.toFixed(2)} mins`);
-    console.log(`   Is Later: ${isLater}`);
-    console.log(
-      `   Toll: ${tollInfo.hasTolls ? `₹${tollInfo.tollAmount}` : "No"}`
-    );
-
-    // ============================================
-    // STEP 4: Fetch All Vehicles
-    // ============================================
+    // STEP 5: Fetch All Vehicles
     let vehicleQuery = { status: true };
 
     if (vehicleIds.length > 0) {
       vehicleQuery._id = { $in: vehicleIds };
     }
 
-    console.log("\n🔍 Database Query:", JSON.stringify(vehicleQuery, null, 2));
-
     const allVehicles = await RidesSuggestionModel.find(vehicleQuery);
-
-    console.log(`\n📊 Fetched ${allVehicles.length} vehicles from database`);
-    if (allVehicles.length > 0) {
-      console.log(
-        "   Vehicle Names:",
-        allVehicles.map((v) => `"${v.name}"`).join(", ")
-      );
-    }
 
     if (allVehicles.length === 0) {
       return res.status(404).json({
@@ -1097,11 +1048,7 @@ exports.calculateRidePriceForUser = async (req, res) => {
       });
     }
 
-    // ============================================
-    // STEP 5: Filter Vehicles (Bike & Auto Logic)
-    // ============================================
-    console.log("\n========== VEHICLE FILTERING ==========");
-
+    // STEP 6: Filter Vehicles (Bike & Auto Logic)
     const filteredVehicles = [];
     const excludedVehicles = [];
 
@@ -1110,11 +1057,8 @@ exports.calculateRidePriceForUser = async (req, res) => {
       let shouldExclude = false;
       let exclusionReasons = [];
 
-      // 🚴 BIKE SPECIAL RULES
+      // BIKE SPECIAL RULES
       if (vehicleName === "bike") {
-        console.log(`\n🚴 Checking BIKE (ID: ${vehicle._id}):`);
-
-        // Rule 1: Distance limit 50km (can cross boundaries)
         if (distance_km > 50) {
           shouldExclude = true;
           exclusionReasons.push(
@@ -1122,40 +1066,31 @@ exports.calculateRidePriceForUser = async (req, res) => {
           );
         }
 
-        // Rule 2: No later rides
         if (isLater) {
           shouldExclude = true;
           exclusionReasons.push("scheduled for later");
         }
 
         if (shouldExclude) {
-          console.log(`   ❌ EXCLUDED: ${exclusionReasons.join(", ")}`);
           excludedVehicles.push({
             name: vehicle.name,
             id: vehicle._id,
             reasons: exclusionReasons,
           });
         } else {
-          console.log(
-            `   ✅ INCLUDED: Distance ≤50km, immediate ride, can cross boundaries`
-          );
           filteredVehicles.push(vehicle);
         }
         continue;
       }
 
-      // 🛺 AUTO SPECIAL RULES
+      // AUTO SPECIAL RULES
       if (vehicleName === "auto") {
-        console.log(`\n🛺 Checking AUTO (ID: ${vehicle._id}):`);
-
-        // Detect cities for origin and destination
         const originCity = detectCity(origin.latitude, origin.longitude);
         const destCity = detectCity(
           destination.latitude,
           destination.longitude
         );
 
-        // Rule 1: Distance limit 50km
         if (distance_km > 50) {
           shouldExclude = true;
           exclusionReasons.push(
@@ -1163,75 +1098,40 @@ exports.calculateRidePriceForUser = async (req, res) => {
           );
         }
 
-        // Rule 2: No later rides
         if (isLater) {
           shouldExclude = true;
           exclusionReasons.push("scheduled for later");
         }
 
-        // Rule 3: NO STATE/CITY BOUNDARY CROSSING
-        // Autos can only operate within the same city
         if (originCity && destCity && originCity !== destCity) {
           shouldExclude = true;
           const boundaryInfo = `${
             CITY_BOUNDARIES[originCity]?.name || originCity
           } → ${CITY_BOUNDARIES[destCity]?.name || destCity}`;
           exclusionReasons.push(`cannot cross city boundary (${boundaryInfo})`);
-          console.log(
-            `   🚫 BOUNDARY VIOLATION: Autos cannot travel ${boundaryInfo}`
-          );
         }
 
-        // Rule 4: Both locations must be within NCR coverage
         if (!originCity || !destCity) {
           shouldExclude = true;
           exclusionReasons.push("location outside service area");
-          console.log(
-            `   🚫 OUT OF COVERAGE: Origin or destination outside NCR`
-          );
         }
 
         if (shouldExclude) {
-          console.log(`   ❌ EXCLUDED: ${exclusionReasons.join(", ")}`);
           excludedVehicles.push({
             name: vehicle.name,
             id: vehicle._id,
             reasons: exclusionReasons,
           });
         } else {
-          console.log(
-            `   ✅ INCLUDED: Distance ≤50km, immediate ride, within ${
-              CITY_BOUNDARIES[originCity]?.name || originCity
-            }`
-          );
           filteredVehicles.push(vehicle);
         }
         continue;
       }
 
-      // 🚗 OTHER VEHICLES (Cars, SUVs, etc.) - Always included
-      console.log(
-        `\n🚗 Checking ${vehicle.name} (ID: ${vehicle._id}): ✅ INCLUDED (no restrictions)`
-      );
+      // OTHER VEHICLES - Always included
       filteredVehicles.push(vehicle);
     }
 
-    console.log(`\n========== FILTERING SUMMARY ==========`);
-    console.log(`✅ Included: ${filteredVehicles.length} vehicles`);
-    if (filteredVehicles.length > 0) {
-      console.log(
-        `   Names: ${filteredVehicles.map((v) => v.name).join(", ")}`
-      );
-    }
-    console.log(`❌ Excluded: ${excludedVehicles.length} vehicles`);
-    if (excludedVehicles.length > 0) {
-      excludedVehicles.forEach((ev) => {
-        console.log(`   - ${ev.name}: ${ev.reasons.join(", ")}`);
-      });
-    }
-    console.log("=======================================\n");
-
-    // Check if any vehicles remain
     if (filteredVehicles.length === 0) {
       return res.status(404).json({
         success: false,
@@ -1249,9 +1149,7 @@ exports.calculateRidePriceForUser = async (req, res) => {
       });
     }
 
-    // ============================================
-    // STEP 6: Prepare Conditions
-    // ============================================
+    // STEP 7: Prepare Conditions
     const conditions = {
       isNightTime: actualIsNightTime,
       isRaining: weatherData.isRaining,
@@ -1265,82 +1163,44 @@ exports.calculateRidePriceForUser = async (req, res) => {
       waitingTimeInMinutes,
     };
 
-    // ============================================
-    // STEP 7: Calculate Prices for Regular Vehicles
-    // ============================================
-    console.log("\n========== PRICE CALCULATION ==========");
-
+    // STEP 8: Calculate Prices for Regular Vehicles
     const vehiclePrices = filteredVehicles.map((vehicle) => {
       const vehicleName = (vehicle.name || "").toLowerCase().trim();
-
-      // 🚴 BIKES NEVER PAY TOLLS - Override tollInfo
       const vehicleTollInfo =
         vehicleName === "bike"
           ? { hasTolls: false, tollAmount: 0, tollDetails: null }
           : tollInfo;
-
-      if (vehicleName === "bike" && tollInfo.hasTolls) {
-        console.log(
-          `🚴 Bike toll override: Original toll ₹${tollInfo.tollAmount} → ₹0 (Bikes don't pay tolls)`
-        );
-      }
 
       return calculateVehiclePrice(
         vehicle,
         routeData,
         conditions,
         vehicleTollInfo,
-        origin, // ← Add this
-        destination // ← Add this
+        origin,
+        destination,
+        stateInfo
       );
     });
 
-    // Sort by price (lowest first)
     vehiclePrices.sort((a, b) => a.totalPrice - b.totalPrice);
 
-    console.log(`✅ Calculated prices for ${vehiclePrices.length} vehicles`);
-
-    // ============================================
-    // STEP 8: Calculate Rental Prices (if applicable)
-    // ============================================
+    // STEP 9: Calculate Rental Prices (if applicable)
     let rentalVehiclePrices = [];
     if (shouldCalculateRentals) {
-      console.log("🚕 Calculating rental vehicle prices...");
       rentalVehiclePrices = await calculateRentalPrices(
         distance_km,
         traffic_duration_minutes,
         conditions,
         origin,
-        destination
+        destination,
+        stateInfo
       );
-      console.log(`✅ Calculated ${rentalVehiclePrices.length} rental options`);
-    } else {
-      console.log("🚫 Skipping rental calculations (intercity or later ride)");
     }
 
-    // ============================================
-    // STEP 9: Prepare Response
-    // ============================================
+    // STEP 10: Prepare Response
     const executionTime = `${((performance.now() - startTime) / 1000).toFixed(
       3
     )}s`;
-
-    console.log("\n========== FINAL SUMMARY ==========");
-    console.log(`Distance: ${distance_km.toFixed(2)} km`);
-    console.log(`Duration: ${traffic_duration_minutes.toFixed(2)} mins`);
-    console.log(`Conditions:`, conditions);
-    console.log(
-      `Toll: ${
-        tollInfo.hasTolls
-          ? `₹${tollInfo.tollAmount} (${tollInfo.tollDetails?.route})`
-          : "No"
-      }`
-    );
-    console.log(`Regular vehicles: ${filteredVehicles.length}`);
-    console.log(`Rental options: ${rentalVehiclePrices.length}`);
-    console.log(`Excluded vehicles: ${excludedVehicles.length}`);
-    console.log(`Execution time: ${executionTime}`);
-    console.log("===================================\n");
 
     const response = {
       success: true,
@@ -1361,6 +1221,11 @@ exports.calculateRidePriceForUser = async (req, res) => {
               note: "Bikes are exempt from all toll charges",
             }
           : { hasTolls: false },
+        stateInfo: {
+          originState: stateInfo.originState,
+          destState: stateInfo.destState,
+          primaryStateForDiscount: stateInfo.state,
+        },
         conditions: {
           ...conditions,
           weatherCondition: weatherData.condition,
@@ -1371,14 +1236,12 @@ exports.calculateRidePriceForUser = async (req, res) => {
       executionTime,
     };
 
-    // Add rental prices if available
     if (rentalVehiclePrices.length > 0) {
       response.rentalVehiclePrices = rentalVehiclePrices;
       response.message =
         "Ride prices calculated successfully (including rental options)";
     }
 
-    // Add vehicle exclusion info if any vehicles were excluded
     if (excludedVehicles.length > 0) {
       response.vehicleExclusion = {
         totalExcluded: excludedVehicles.length,
@@ -1387,55 +1250,6 @@ exports.calculateRidePriceForUser = async (req, res) => {
           reasons: ev.reasons,
         })),
       };
-
-      // Add informational notes
-      const bikeExcluded = excludedVehicles.some(
-        (ev) => ev.name.toLowerCase() === "bike"
-      );
-      const autoExcluded = excludedVehicles.some(
-        (ev) => ev.name.toLowerCase() === "auto"
-      );
-
-      if (bikeExcluded || autoExcluded) {
-        let notes = [];
-
-        if (bikeExcluded) {
-          const bikeReasons =
-            excludedVehicles.find((ev) => ev.name.toLowerCase() === "bike")
-              ?.reasons || [];
-          notes.push(
-            `Bike: ${bikeReasons.join(
-              ", "
-            )} (Limit: 50km, can cross boundaries, no tolls)`
-          );
-        }
-
-        if (autoExcluded) {
-          const autoReasons =
-            excludedVehicles.find((ev) => ev.name.toLowerCase() === "auto")
-              ?.reasons || [];
-          notes.push(
-            `Auto: ${autoReasons.join(
-              ", "
-            )} (Limit: 50km, can cross boundaries)`
-          );
-        }
-
-        response.note = notes.join(" | ");
-      }
-    }
-
-    // Add special note about Bike toll exemption if toll exists
-    if (tollInfo.hasTolls) {
-      const bikeIncluded = filteredVehicles.some(
-        (v) => v.name.toLowerCase().trim() === "bike"
-      );
-      if (bikeIncluded) {
-        response.specialNotes = response.specialNotes || [];
-        response.specialNotes.push(
-          "🚴 Bikes are exempt from all toll charges on this route"
-        );
-      }
     }
 
     return res.status(200).json(response);
@@ -1443,10 +1257,6 @@ exports.calculateRidePriceForUser = async (req, res) => {
     const executionTime = `${((performance.now() - startTime) / 1000).toFixed(
       3
     )}s`;
-    console.error("\n❌ ========== ERROR ==========");
-    console.error("Error calculating ride price:", error.message);
-    console.error("Stack:", error.stack);
-    console.error("==============================\n");
 
     return res.status(500).json({
       success: false,
@@ -1478,7 +1288,6 @@ exports.reCalculatePriceForOnlyRentals = async (req, res) => {
     const origDist = parseFloat(originalDistanceKm);
     const currFare = parseFloat(currentFare);
 
-    // Validate input
     if (
       isNaN(origHrs) ||
       isNaN(addHrs) ||
@@ -1491,7 +1300,6 @@ exports.reCalculatePriceForOnlyRentals = async (req, res) => {
         .json({ success: false, message: "Invalid numeric values" });
     }
 
-    // Fetch rental settings
     const rentalSettings = await settings.findOne().select("rental");
     const config = rentalSettings?.rental?.[rentalType];
     if (!config || !config.isAvailable) {
@@ -1508,23 +1316,19 @@ exports.reCalculatePriceForOnlyRentals = async (req, res) => {
     let additionalDistanceCost = 0;
     let totalFare = currFare;
 
-    // Special case: originalHours = 1 AND additionalHours = 1
     if (origHrs === 1 && addHrs === 1) {
       estimatedDistanceKm += 15;
       totalHours = origHrs;
       totalFare = currFare;
     } else if (addHrs > 0) {
-      // Normal calculation
       const additionalMinutes = addHrs * 60;
       additionalTimeCost = additionalMinutes * pricePerMin;
 
-      // Extra distance after first hour
       const extraHoursAfterFirst = Math.max(totalHours - 1, 0);
       const additionalDistance = extraHoursAfterFirst * 15;
       estimatedDistanceKm = origDist + additionalDistance;
       additionalDistanceCost = additionalDistance * pricePerKm;
 
-      // Update total fare
       totalFare = currFare + additionalTimeCost + additionalDistanceCost;
     }
 
@@ -1544,11 +1348,8 @@ exports.reCalculatePriceForOnlyRentals = async (req, res) => {
       executionTime: `${((performance.now() - startTime) / 1000).toFixed(3)}s`,
     };
 
-    console.log("📋 Recalculation:", response.additional);
-
     return res.status(200).json(response);
   } catch (error) {
-    console.error("❌ Error in reCalculatePriceForOnlyRentals:", error);
     return res.status(500).json({
       success: false,
       message: error.message || error,

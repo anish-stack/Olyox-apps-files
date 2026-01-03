@@ -706,86 +706,114 @@ export default function RideScreen() {
     return `${truncated.toFixed(2)} km`;
   };
 
-  const stableState = useMemo(() => {
-    if (!rideDetails) return null;
+// इसको अपने RideScreen.jsx में replace करो (stableState वाला हिस्सा)
 
-    const pickup = rideDetails?.pickup_location?.coordinates;
-    const driver = currentDriverLocation?.coordinates;
-    let distanceToPickup = null;
-    let distanceToPickupFormatted = "-";
-    let etaMinutes = null;
+const stableState = useMemo(() => {
+  if (!rideDetails) return null;
 
-    if (pickup && driver) {
-      const pickupLatLon = [pickup[1], pickup[0]];
-      const driverLatLon = [driver[1], driver[0]];
+  const pickup = rideDetails?.pickup_location?.coordinates;
+  const drop = rideDetails?.drop_location?.coordinates;
+  const driver = currentDriverLocation?.coordinates;
+  
+  let distanceToPickup = null;
+  let distanceToPickupFormatted = "-";
+  let distanceTravelledFormatted = "-";
+  let etaMinutes = null;
+  let recalculatedFare = null;
 
-      // Get numeric distance in km
-      const distanceKm = haversineDistance(driver[1], driver[0], pickup[1], pickup[0]) / 1000;
-      distanceToPickup = distanceKm;
-      distanceToPickupFormatted = formatDistance(distanceKm);
-      console.log("distanceToPickupFormatted", distanceToPickupFormatted)
+  if (pickup && driver) {
+    const distanceKm = haversineDistance(
+      driver[1], 
+      driver[0], 
+      pickup[1], 
+      pickup[0]
+    ) / 1000;
+    
+    distanceToPickup = distanceKm;
+    distanceToPickupFormatted = formatDistance(distanceKm);
 
-
-      // Choose correct speed
-      let speedKph = SPEED.NORMAL;
-      if (rideDetails?.isIntercityRides || rideDetails?.isIntercity) {
-        speedKph = SPEED.HIGHWAY;
-      } else if (rideDetails?.is_rental) {
-        speedKph = SPEED.NORMAL;
-      }
-      console.log("speed", speedKph)
-
-      // ETA calculation
-      if (distanceKm > 0 && speedKph > 0) {
-        const hours = distanceKm / speedKph;
-        etaMinutes = Math.round(hours * 60);
-      }
+    let speedKph = SPEED.NORMAL;
+    if (rideDetails?.isIntercityRides || rideDetails?.isIntercity) {
+      speedKph = SPEED.HIGHWAY;
+    } else if (rideDetails?.is_rental) {
+      speedKph = SPEED.NORMAL;
     }
 
-    return {
-      _id: rideDetails._id,
-      pickupAddress: rideDetails?.pickup_address?.formatted_address || "",
-      dropAddress: rideDetails?.drop_address?.formatted_address || "",
-      totalFare:
-        rideDetails?.pricing?.total_fare || rideDetails?.fare?.total || 0,
-      discount: rideDetails?.pricing?.discount || 0,
-      user: rideDetails?.user,
-      toll: rideDetails?.pricing?.toll_charge || 0,
-      driver_arrived_at: rideDetails?.driver_arrived_at,
-      isIntercityRides: rideDetails?.isIntercityRides || false,
-      IntercityPickupTime: rideDetails?.IntercityPickupTime || null,
-      rideType: rideDetails?.rideType || "local",
-      isIntercity: rideDetails?.isIntercity || false,
-      isRental: rideDetails?.is_rental || false,
-      isLater: rideDetails?.isLater || false,
-      rental_km_limit: rideDetails?.rental_km_limit || 0,
-      rentalHours: rideDetails?.rentalHours || 0,
-      paymentStatus,
-      isParcelOrder: rideDetails?.isParcelOrder || false,
-      details: rideDetails?.details,
-      routeInfo: rideDetails?.route_info,
-      pickupLocation: pickup,
-      dropLocation: rideDetails?.drop_location?.coordinates,
-      distanceToPickup, // numeric (for internal logic)
-      distanceToPickupFormatted, // string (for display)
-      etaMinutes,
-    };
-  }, [
-    rideDetails?._id,
-    rideDetails?.pickup_address?.formatted_address,
-    rideDetails?.drop_address?.formatted_address,
-    rideDetails?.pricing?.total_fare,
-    rideDetails?.pricing?.discount,
-    rideDetails?.fare?.total,
-    currentDriverLocation?.coordinates?.[0],
-    currentDriverLocation?.coordinates?.[1],
-    rideDetails?.isIntercityRides,
-    rideDetails?.isIntercity,
-    rideDetails?.is_rental,
+    if (distanceKm > 0 && speedKph > 0) {
+      const hours = distanceKm / speedKph;
+      etaMinutes = Math.round(hours * 60);
+    }
+  }
+
+  // ✅ Cancel होने पर: travelled distance calculate करो
+  if (currentStatus === "cancelled" && pickup && drop && driver) {
+    const travelledKm = haversineDistance(
+      pickup[1], 
+      pickup[0], 
+      driver[1], 
+      driver[0]
+    ) / 1000;
+
+    distanceTravelledFormatted = formatDistance(travelledKm);
+
+    // Recalculated fare (distance के आधार पर)
+    const baseFare = 50; // अपना base fare रखो
+    const perKmRate = 15; // per km rate
+    recalculatedFare = baseFare + (travelledKm * perKmRate);
+  }
+
+  return {
+    _id: rideDetails._id,
+    pickupAddress: rideDetails?.pickup_address?.formatted_address || "",
+    dropAddress: rideDetails?.drop_address?.formatted_address || "",
+    totalFare: rideDetails?.pricing?.total_fare || rideDetails?.fare?.total || 0,
+    discount: rideDetails?.pricing?.discount || 0,
+    user: rideDetails?.user,
+    toll: rideDetails?.pricing?.toll_charge || 0,
+    driver_arrived_at: rideDetails?.driver_arrived_at,
+    isIntercityRides: rideDetails?.isIntercityRides || false,
+    IntercityPickupTime: rideDetails?.IntercityPickupTime || null,
+    rideType: rideDetails?.rideType || "local",
+    isIntercity: rideDetails?.isIntercity || false,
+    isRental: rideDetails?.is_rental || false,
+    isLater: rideDetails?.isLater || false,
+    rental_km_limit: rideDetails?.rental_km_limit || 0,
+    rentalHours: rideDetails?.rentalHours || 0,
     paymentStatus,
-  ]);
+    isParcelOrder: rideDetails?.isParcelOrder || false,
+    details: rideDetails?.details,
+    routeInfo: rideDetails?.route_info,
+    pickupLocation: pickup,
+    dropLocation: drop,
+    distanceToPickup,
+    distanceToPickupFormatted,
+    distanceTravelledFormatted, // ✅ नया field
+    etaMinutes,
+    
+    // ✅ Recalculation data
+    rec_total_distance: rideDetails?.rec_total_distance || distanceTravelledFormatted,
+    rec_total_fare: rideDetails?.rec_total_fare || recalculatedFare,
+    recalculated_on_cancel: rideDetails?.recalculated_on_cancel || currentStatus === "cancelled",
+    original_fare: rideDetails?.pricing?.total_fare || rideDetails?.fare?.total || 0,
+  };
+}, [
+  rideDetails?._id,
+  rideDetails?.pickup_address?.formatted_address,
+  rideDetails?.drop_address?.formatted_address,
+  rideDetails?.pricing?.total_fare,
+  rideDetails?.pricing?.discount,
+  rideDetails?.fare?.total,
+  currentDriverLocation?.coordinates?.[0],
+  currentDriverLocation?.coordinates?.[1],
+  rideDetails?.isIntercityRides,
+  rideDetails?.isIntercity,
+  rideDetails?.is_rental,
+  paymentStatus,
+  currentStatus, // ✅ यह add करो
+]);
 
 
+console.log("rideDetails?.rec_total_distance",rideDetails?.rec_total_distance)
 
   // Render loading or error state
   if (loading) return <LoadingScreen />;

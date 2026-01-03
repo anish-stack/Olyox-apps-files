@@ -70,6 +70,9 @@ import OlyoxAppUpdate from "./context/CheckAppUpdate";
 import UpdateModal from "./src/components/common/UpdateModal";
 import { API_URL_APP } from "./constant/api";
 import { ThemeProvider } from "./src/theme/ThemeContext";
+import PreferenceScreen from "./src/screens/PreferenceScreen/PreferenceScreen";
+import Reserve from "./src/screens/Reserves/reserve";
+import RideCancelledScreen from "./src/screens/Rides_Screen/steps/RideCancelledScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -489,12 +492,15 @@ useEffect(() => {
                     component={BhOtpVerification}
                   />
                   <Stack.Screen name="DocumentUpload" component={Documents} />
+                  <Stack.Screen name="PreferenceScreen" component={PreferenceScreen}/>
                   <Stack.Screen name="Wait_Screen" component={Wait_Screen} />
                   <Stack.Screen name="Home" component={Home} />
                   <Stack.Screen
                     name="current_ride"
                     component={RideFirstStepScreen}
                   />
+                  <Stack.Screen name="reserve" component={RideCancelledScreen}/>
+                  {/* <Stack.Screen name="reserve" component={Reserve}/> */}
                   <Stack.Screen name="ProfileScreen" component={Profile} />
                   <Stack.Screen name="Settings" component={Settings} />
                   <Stack.Screen name="WithdrawScreen" component={Withdraw} />

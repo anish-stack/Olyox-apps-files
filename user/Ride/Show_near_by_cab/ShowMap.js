@@ -46,7 +46,8 @@ export default function ShowMap({ isLater = false }) {
   const route = useRoute();
   const { data, pickup, dropoff, currentLocation } = route.params;
   const { settings } = useSettings();
-
+  const [pendingRideId, setPendingRideId] = useState(null);
+  const [pendingRideData, setPendingRideData] = useState(null);
   const ridePercentageOff = settings?.ride_percentage_off || 0;
 
   const origin = useMemo(
@@ -172,14 +173,14 @@ export default function ShowMap({ isLater = false }) {
             .includes("mini")
             ? "mini"
             : selectedRental.vehicleName.toLowerCase().includes("sedan")
-            ? "sedan"
-            : "suv";
+              ? "sedan"
+              : "suv";
 
           const originalHours =
             Math.ceil(
               (selectedRental.pricing?.timeCost || 0) /
-                (selectedRental.pricing?.pricePerMin || 1) /
-                60
+              (selectedRental.pricing?.pricePerMin || 1) /
+              60
             ) || 1;
 
           const res = await api.post(RECALCULATE_URL, {
@@ -227,8 +228,8 @@ export default function ShowMap({ isLater = false }) {
           const originalHours =
             Math.ceil(
               (selectedRental.pricing?.timeCost || 0) /
-                (selectedRental.pricing?.pricePerMin || 1) /
-                60
+              (selectedRental.pricing?.pricePerMin || 1) /
+              60
             ) || 1;
           const pricePerHour = basePrice / originalHours;
           const estimatedPrice = floor(pricePerHour * hrs);
@@ -531,13 +532,13 @@ export default function ShowMap({ isLater = false }) {
 
   const handleBookNow = useCallback(async () => {
     if (!selectedRide) return showToast("Select a ride");
-    if (selectedRide.isRental && !priceCache[selectedHours])
-      return showToast("Choose rental duration");
+    if (selectedRide.isRental && !priceCache[selectedHours]) return showToast("Choose rental duration");
 
     setShowTimePicker(false);
-    setIsSearching(true);
+    // setIsSearching(true);
     setIsBookingInProgress(true);
     setBookingMessage("Requesting ride...");
+
     const rideData = {
       vehicleType: selectedRide.vehicleName || selectedRide.vehicleType,
       pickupLocation: origin,
@@ -575,19 +576,14 @@ export default function ShowMap({ isLater = false }) {
         rentalHours: farePayload.rental_hours || 0,
         estimatedKm: farePayload.estimated_km || 0,
       });
-      track(
-        "ACTION",
-        "booking",
-        "Navigated to confirm_screen_done for intercity",
-        { isLater }
-      );
+      track("ACTION", "booking", "Navigated to confirm_screen_done for intercity", { isLater });
       return;
     }
 
     try {
       const token = await tokenCache.getToken("auth_token_db");
       const response = await axios.post(
-        `https://www.appv2.olyox.com/api/v1/new/new-ride`,
+        "https://www.appv2.olyox.com/api/v1/new/new-ride",
         rideData,
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -597,43 +593,100 @@ export default function ShowMap({ isLater = false }) {
 
       if (response.data?.success && response.data.data?.rideId) {
         const rideDetails = response.data.data;
-        setCreatedRideId(response.data.data?.rideId);
-        if (rideDetails.ride_otp) setRideOtp(rideDetails.ride_otp);
-        setBookingMessage("Searching for drivers...");
-        setCurrentRideStatus(rideDetails.ride_status || "searching");
+        const newRideId = rideDetails.rideId;
 
-        track("API_SUCCESS", "booking", "Ride created", {
-          rideId: rideDetails.rideId,
-        });
+        // Ride created successfully → ab confirmation Alert dikhao
+        Alert.alert(
+          "Confirm Your Ride",
+          "Do you want to confirm and start searching for nearby drivers?", [
+          {
+            text: "Cancel",
+            style: "cancel",
+            onPress: async () => {
+              // User cancelled → ride cancel kar do
+              if (newRideId) {
+                try {
+                  const cancelToken = await tokenCache.getToken("auth_token_db");
+                  if (cancelToken) {
+                    await axios.post(
+                      `https://www.appv2.olyox.com/api/v1/new/cancel-before/${newRideId}`,
+                      {},
+                      {
+                        headers: { Authorization: `Bearer ${cancelToken}` },
+                        timeout: 10000,
+                      }
+                    );
+                  }
+                } catch (cancelErr) {
+                  console.log("Cancel ride error:", cancelErr);
+                  // Optional: show toast if cancel fails
+                }
+              }
+              showToast("Ride cancelled");
+              stopBookingProcess("USER_CANCELLED_AFTER_CREATE");
+            },
+          },
+          {
+            text: "Confirm",
+            onPress: async () => {
+              // User confirmed → backend pe confirm API call
+              try {
+                await axios.post(
+                  "https://www.appv2.olyox.com/api/v1/new/new-ride-confirm",
+                  { rideId: newRideId }, // assuming backend expects rideId in body
+                  {
+                    headers: { Authorization: `Bearer ${token}` },
+                    timeout: 10000,
+                  }
+                );
+                setIsSearching(true)
+                // Confirm successful → ab searching start karo
+                setCreatedRideId(newRideId);
+                if (rideDetails.ride_otp) setRideOtp(rideDetails.ride_otp);
+                setBookingMessage("Searching for drivers...");
+                setCurrentRideStatus(rideDetails.ride_status || "searching");
 
-        const poolTimeout = setTimeout(() => {
-          if (isBookingInProgress) {
-            setRidePoolingEnabled(true);
-            setBookingMessage("Expanding search with ride pooling...");
-            track("ACTION", "booking", "Ride pooling enabled");
-          }
-        }, 4000);
-        setPoolingTimeoutId(poolTimeout);
+                track("API_SUCCESS", "booking", "Ride confirmed and searching started", {
+                  rideId: newRideId,
+                });
 
-        const bookTimeout = setTimeout(() => {
-          if (isBookingInProgress && currentRideStatus !== "driver_assigned") {
-            showToast("No Drivers Found");
-            track("WARNING", "booking", "Booking timeout");
-            stopBookingProcess("TIMEOUT");
-          }
-        }, BOOKING_TIMEOUT);
-        setBookingTimeoutId(bookTimeout);
+                // Pooling timeout
+                const poolTimeout = setTimeout(() => {
+                  if (isBookingInProgress) {
+                    setRidePoolingEnabled(true);
+                    setBookingMessage("Expanding search with ride pooling...");
+                    track("ACTION", "booking", "Ride pooling enabled");
+                  }
+                }, 4000);
+                setPoolingTimeoutId(poolTimeout);
+
+                // Booking timeout
+                const bookTimeout = setTimeout(() => {
+                  if (isBookingInProgress && currentRideStatus !== "driver_assigned") {
+                    showToast("No Drivers Found");
+                    track("WARNING", "booking", "Booking timeout");
+                    stopBookingProcess("TIMEOUT");
+                  }
+                }, BOOKING_TIMEOUT);
+                setBookingTimeoutId(bookTimeout);
+              } catch (confirmErr) {
+                console.log("Ride confirm error:", confirmErr);
+                showToast("Failed to confirm ride");
+                stopBookingProcess("RIDE_CONFIRM_API_ERROR");
+              }
+            },
+          },
+        ],
+          { cancelable: false }
+        );
       } else {
         throw new Error(response.data?.message || "Invalid server response.");
       }
     } catch (err) {
-      const errorMessage =
-        err.response?.data?.message || err.message || "Failed to create ride.";
+      const errorMessage = err.response?.data?.message || err.message || "Failed to create ride.";
       console.log(errorMessage);
       showToast(errorMessage);
-      track("API_ERROR", "booking", "Create ride failed", {
-        error: errorMessage,
-      });
+      track("API_ERROR", "booking", "Create ride failed", { error: errorMessage });
       stopBookingProcess("CREATE_RIDE_API_ERROR");
     }
   }, [
@@ -1127,7 +1180,7 @@ export default function ShowMap({ isLater = false }) {
                 (!selectedHours ||
                   (priceCache[selectedHours] &&
                     priceCache[selectedHours].loading)) &&
-                  modalStyles.confirmBtnDisabled,
+                modalStyles.confirmBtnDisabled,
               ]}
               onPress={handleBookNow}
               disabled={

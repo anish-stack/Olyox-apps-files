@@ -25,20 +25,10 @@ export default function Categories({ refreshing }) {
   const [loading, setLoading] = useState(true)
   const navigation = useNavigation()
   const { track } = useTrack()
-  // Memoized fetch function that won't be recreated on re-renders
   const fetchCategories = useCallback(async () => {
     try {
-      // Try to get cached data first
-      const cachedCategories = await CacheService.get(
-        CacheService.CACHE_KEYS.CATEGORIES
-      )
+    
 
-      if (cachedCategories && !refreshing) {
-        setCategories(cachedCategories)
-        setLoading(false)
-        console.log("Using cached categories")
-        return
-      }
 
       // If no cache or refreshing, fetch from API
       console.log("Fetching categories from API")
@@ -80,7 +70,6 @@ export default function Categories({ refreshing }) {
 
         setCategories(sorted)
         // Cache the successful response
-        await CacheService.set(CacheService.CACHE_KEYS.CATEGORIES, sorted)
       }
     } catch (error) {
       console.error("Error fetching categories:", error)

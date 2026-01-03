@@ -17,7 +17,7 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import axios from 'axios';
 import { tokenCache } from '../Auth/cache';
 
-const API_BASE_URL = 'https://appv2.olyox.com/api/v1/hotels';
+const API_BASE_URL = 'https://www.appv2.olyox.com/api/v1/hotels';
 
 const BookingDetails = ({ route, navigation }) => {
   const insets = useSafeAreaInsets();

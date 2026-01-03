@@ -229,7 +229,7 @@ const RideRequestSchema = new Schema({
     }],
     ride_status: {
         type: String,
-        enum: ['pending', 'searching', 'driver_assigned', 'driver_arrived', 'in_progress', 'completed', 'cancelled'],
+        enum: ['pending', 'pre-searching','searching', 'driver_assigned', 'driver_arrived', 'in_progress', 'completed', 'cancelled'],
         default: 'pending',
         required: true,
         index: true
@@ -507,6 +507,17 @@ const RideRequestSchema = new Schema({
         }]
     }],
     isIntercity: {
+        type: Boolean,
+        default: false
+    },
+rec_total_distance:{
+      type: String,
+},
+rec_total_fare:{
+      type: String,
+},
+
+    recalculated_on_cancel:{
         type: Boolean,
         default: false
     },

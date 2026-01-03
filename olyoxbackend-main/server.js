@@ -982,7 +982,6 @@ app.get("/rider-light/:tempRide", async (req, res) => {
     if (!ride) {
       return res.status(404).json({ error: "Ride not found" });
     }
-    console.log("ride.driver",ride.driver)
 
     return res.status(200).json({
       success: true,
@@ -1212,37 +1211,73 @@ app.post("/webhook/cab-receive-location", Protect, async (req, res) => {
 
 // Optional: Periodic bulk update from cache to DB (backup mechanism)
 setInterval(async () => {
-  if (locationUpdateCache.size === 0) return;
+  const cacheSize = locationUpdateCache.size;
 
-  console.log(`🔄 Bulk sync: ${locationUpdateCache.size} riders`);
+  console.log(`⏱️ Bulk sync tick started | Cache size: ${cacheSize}`);
+
+  if (cacheSize === 0) {
+    console.log("⚠️ No rider locations to sync. Skipping...");
+    return;
+  }
 
   const bulkOps = [];
   const now = Date.now();
+  let skippedCount = 0;
 
   for (const [riderId, data] of locationUpdateCache.entries()) {
-    // Only sync if not updated in last 2 seconds (avoid duplicate writes)
-    if (now - data.lastUpdate > 2000) {
-      bulkOps.push({
-        updateOne: {
-          filter: { _id: riderId },
-          update: {
-            location: data.location,
-            lastUpdated: data.lastUpdate,
-          },
-        },
-      });
+    const timeDiff = now - data.lastUpdate;
+
+    // Skip very recent updates (avoid duplicate DB writes)
+    if (timeDiff <= 200) {
+      skippedCount++;
+      console.log(
+        `⏭️ Skipping rider ${riderId} | Updated ${timeDiff}ms ago`
+      );
+      continue;
     }
+
+    console.log(
+      `📍 Queued rider ${riderId} for sync | Last update: ${new Date(
+        data.lastUpdate
+      ).toISOString()}`
+    );
+
+    bulkOps.push({
+      updateOne: {
+        filter: { _id: riderId },
+        update: {
+          location: data.location,
+          lastUpdated: data.lastUpdate,
+        },
+      },
+    });
   }
 
-  if (bulkOps.length > 0) {
-    try {
-      await RiderModel.bulkWrite(bulkOps, { ordered: false });
-      console.log(`✅ Bulk synced ${bulkOps.length} locations`);
-    } catch (err) {
-      console.error("❌ Bulk sync error:", err.message);
-    }
+  console.log(
+    `📦 Bulk ops prepared: ${bulkOps.length} | Skipped: ${skippedCount}`
+  );
+
+  if (bulkOps.length === 0) {
+    console.log("🚫 No valid updates to sync after filtering.");
+    return;
   }
-}, 30000); // Run every 30 seconds
+
+  try {
+    const result = await RiderModel.bulkWrite(bulkOps, { ordered: false });
+
+    console.log("✅ Bulk sync successful");
+    console.log("📊 Mongo Result:", {
+      matched: result.matchedCount,
+      modified: result.modifiedCount,
+      upserts: result.upsertedCount,
+    });
+  } catch (err) {
+    console.error("❌ Bulk sync failed");
+    console.error("🧨 Error message:", err.message);
+  }
+
+  console.log("⏱️ Bulk sync tick completed\n");
+}, 3000); // every 30 seconds
 
 app.get("/admin/active-drivers-20min", async (req, res) => {
   try {

@@ -350,7 +350,7 @@ class LocationUpdateService : Service() {
     fusedLocationClient.lastLocation
         .addOnSuccessListener { location: Location? ->
             if (location != null) {
-                val apiUrl = "https://appv2.olyox.com/webhook/receive-location" // <- add your API URL
+                val apiUrl = "https://www.appv2.olyox.com/webhook/receive-location" // <- add your API URL
                 postToServer(location, apiUrl)
                 updateNotification("Active • ${getCurrentTime()}")
             } else {
