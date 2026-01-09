@@ -9,10 +9,10 @@ const cloudinary = require('cloudinary').v2
 const sharp = require('sharp');
 const fs = require('fs');
 cloudinary.config({
-    cloud_name: 'dsd8nepa5',
-    api_key: '634914486911329',
-    api_secret: 'dOXqEsWHQMjHNJH_FU6_iHlUHBE'
-})
+  cloud_name: "dsd8nepa5",
+  api_key: "634914486911329",
+  api_secret: "dOXqEsWHQMjHNJH_FU6_iHlUHBE",
+});
 //still pending due to error of cors in uploading images
 exports.register_parcel_partner = async (req, res) => {
     try {

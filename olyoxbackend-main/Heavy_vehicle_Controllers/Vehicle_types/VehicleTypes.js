@@ -4,11 +4,10 @@ const fs = require('fs');
 
 
 cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET
+  cloud_name: "dsd8nepa5",
+  api_key: "634914486911329",
+  api_secret: "dOXqEsWHQMjHNJH_FU6_iHlUHBE",
 });
-
 
 exports.createVehicle = async (req, res) => {
     try {

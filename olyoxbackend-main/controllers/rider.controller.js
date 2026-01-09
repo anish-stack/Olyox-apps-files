@@ -22,9 +22,9 @@ const NewRideModelModel = require("../src/New-Rides-Controller/NewRideModel.mode
 const sendNotification = require("../utils/sendNotification");
 const SendWhatsAppMessageNormal = require("../utils/normalWhatsapp");
 cloudinary.config({
-  cloud_name: "daxbcusb5",
-  api_key: "984861767987573",
-  api_secret: "tCBu9JNxC_iaUENm1kDwLrdXL0k",
+  cloud_name: "dsd8nepa5",
+  api_key: "634914486911329",
+  api_secret: "dOXqEsWHQMjHNJH_FU6_iHlUHBE",
 });
 // Register a new rider
 

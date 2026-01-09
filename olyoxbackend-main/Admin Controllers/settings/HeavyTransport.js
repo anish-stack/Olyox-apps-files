@@ -5,9 +5,9 @@ const fs = require("fs").promises;
 const streamifier = require("streamifier");
 
 cloudinary.config({
-    cloud_name: "dsd8nepa5",
-    api_key: "634914486911329",
-    api_secret: "dOXqEsWHQMjHNJH_FU6_iHlUHBE",
+  cloud_name: "dsd8nepa5",
+  api_key: "634914486911329",
+  api_secret: "dOXqEsWHQMjHNJH_FU6_iHlUHBE",
 });
 
 // Helper function to upload image to Cloudinary
