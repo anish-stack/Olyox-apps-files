@@ -92,8 +92,8 @@ android {
         applicationId 'com.happy_coding.olyox'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 53
-                versionName "1.0.14"
+        versionCode 58
+        versionName "1.0.15"
     }
     signingConfigs {
         debug {

@@ -94,7 +94,7 @@ exports.make_recharge = async (req, res) => {
   console.log("🎟️ Detected Jaipur special coupon:", coupon);
 
   // Special Jaipur coupon - apply 99% discount directly
-  const jaipurExpiration = new Date('2026-01-01T23:59:59');
+  const jaipurExpiration = new Date('2026-05-01T23:59:59');
   console.log("⏰ Jaipur coupon expiration date:", jaipurExpiration);
 
   if (new Date() > jaipurExpiration) {
