@@ -252,8 +252,7 @@ io.on("connection", (socket) => {
       }
 
       console.log(
-        `[${new Date().toISOString()}] Location update from ${
-          socket.userType
+        `[${new Date().toISOString()}] Location update from ${socket.userType
         }:${socket.userId}`
       );
       socket.emit("location_ack", { success: true });
@@ -276,8 +275,7 @@ io.on("connection", (socket) => {
     socket.ride_id = ride_id;
     socket.join(`ride_chat:${ride_id}`);
     console.log(
-      `[${new Date().toISOString()}] 🗨️ ${socket.userType}:${
-        socket.userId
+      `[${new Date().toISOString()}] 🗨️ ${socket.userType}:${socket.userId
       } joined chat for ride ${ride_id}`
     );
 
@@ -424,8 +422,7 @@ io.on("connection", (socket) => {
   // Handle reconnection
   socket.on("reconnect", async (attemptNumber) => {
     console.log(
-      `[${new Date().toISOString()}] Socket ${
-        socket.id
+      `[${new Date().toISOString()}] Socket ${socket.id
       } reconnected after ${attemptNumber} attempts`
     );
 
@@ -450,8 +447,7 @@ io.on("connection", (socket) => {
   // Handle disconnection
   socket.on("disconnect", async (reason) => {
     console.log(
-      `[${new Date().toISOString()}] ❌ Socket disconnected: ${
-        socket.id
+      `[${new Date().toISOString()}] ❌ Socket disconnected: ${socket.id
       }, Reason: ${reason}`
     );
 
@@ -460,8 +456,7 @@ io.on("connection", (socket) => {
       try {
         await pubClient.del(`socket:${socket.userType}:${socket.userId}`);
         console.log(
-          `[${new Date().toISOString()}] Cleaned up Redis data for ${
-            socket.userType
+          `[${new Date().toISOString()}] Cleaned up Redis data for ${socket.userType
           }:${socket.userId}`
         );
       } catch (error) {
@@ -506,14 +501,40 @@ async function connectDatabases() {
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-// Middleware
+const allowedOrigins = [
+  /^http:\/\/localhost:\d+$/,        // any localhost port
+  /^http:\/\/127\.0\.0\.1:\d+$/,      // optional: 127.0.0.1
+  "https://olyox.com",
+  "https://www.olyox.com",
+  "https://webapi.olyox.com"
+];
+
 app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS","PATCH"],
+  origin: function (origin, callback) {
+    // Allow mobile apps, Postman, curl (no origin)
+    if (!origin) return callback(null, true);
+
+    const isAllowed = allowedOrigins.some((allowed) => {
+      if (allowed instanceof RegExp) {
+        return allowed.test(origin);
+      }
+      return allowed === origin;
+    });
+
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS blocked: ${origin}`));
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
   allowedHeaders: ["Content-Type", "Authorization"],
 }));
 
 app.options("*", cors());
+
+
 
 setupBullBoard(app);
 const limiter = rateLimit({
@@ -534,8 +555,7 @@ app.use(cookieParser());
 app.use((req, res, next) => {
   if (!pubClient || !pubClient.isOpen) {
     console.warn(
-      `[${new Date().toISOString()}] Redis client not available for request: ${
-        req.path
+      `[${new Date().toISOString()}] Redis client not available for request: ${req.path
       }`
     );
   }
@@ -1004,13 +1024,13 @@ app.get("/rider-light/:tempRide", async (req, res) => {
 
         driver: ride.driver
           ? {
-              name: ride.driver.name,
-              number: ride.driver.number,
-              vehicleName: ride.driver?.rideVehicleInfo?.vehicleName,
-              vehicleType: ride.driver?.rideVehicleInfo?.vehicleType,
-              vehicleNumber: ride.driver?.rideVehicleInfo?.phone,
-              profile: ride.driver?.documents?.profile,
-            }
+            name: ride.driver.name,
+            number: ride.driver.number,
+            vehicleName: ride.driver?.rideVehicleInfo?.vehicleName,
+            vehicleType: ride.driver?.rideVehicleInfo?.vehicleType,
+            vehicleNumber: ride.driver?.rideVehicleInfo?.phone,
+            profile: ride.driver?.documents?.profile,
+          }
           : null,
       },
     });
@@ -2010,8 +2030,7 @@ async function startServer() {
     // Start the server
     server.listen(PORT, () => {
       console.log(
-        `[${new Date().toISOString()}] 🚀 Server running on port ${PORT} (Worker ${
-          process.pid
+        `[${new Date().toISOString()}] 🚀 Server running on port ${PORT} (Worker ${process.pid
         })`
       );
       console.log(`[${new Date().toISOString()}] 🔌 Socket.IO server ready`);
@@ -2019,8 +2038,7 @@ async function startServer() {
         `Bull Board available at http://localhost:${PORT}/admin/queues`
       );
       console.log(
-        `[${new Date().toISOString()}] 🌍 Environment: ${
-          process.env.NODE_ENV || "development"
+        `[${new Date().toISOString()}] 🌍 Environment: ${process.env.NODE_ENV || "development"
         }`
       );
       console.log(
@@ -2029,8 +2047,7 @@ async function startServer() {
     });
   } catch (error) {
     console.error(
-      `[${new Date().toISOString()}] ❌ Failed to start server (Worker ${
-        process.pid
+      `[${new Date().toISOString()}] ❌ Failed to start server (Worker ${process.pid
       }):`,
       error.message
     );
