@@ -101,8 +101,6 @@ export default function App() {
     <Provider store={store}>
       <PaperProvider>
         <GestureHandlerRootView style={{ flex: 1 }}>
-
-
           <SafeAreaProvider>
             {/* <AppWithUpdater> */}
               <NavigationContainer>
