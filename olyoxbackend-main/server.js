@@ -505,6 +505,8 @@ const allowedOrigins = [
   /^http:\/\/localhost:\d+$/,        // any localhost port
   /^http:\/\/127\.0\.0\.1:\d+$/,      // optional: 127.0.0.1
   "https://olyox.com",
+  "https://admin.olyox.com",
+  "https://www.admin.olyox.com",
   "https://www.olyox.com",
   "https://webapi.olyox.com"
 ];
