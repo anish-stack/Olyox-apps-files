@@ -1170,9 +1170,7 @@ if (vehicleName === "auto") {
     filteredVehicles.push(vehicle);
   }
   continue;
-}
-
-      // OTHER VEHICLES - Always included
+}     // OTHER VEHICLES - Always included
       filteredVehicles.push(vehicle);
     }
 

@@ -52,11 +52,6 @@ const offers = [
 
 const comingSoon = [
     {
-        title: "Hotels",
-        description: "Book stays at best prices",
-        icon: "building",
-    },
-    {
         title: "Tiffins",
         description: "Home-cooked meals delivered",
         icon: "cutlery",
@@ -100,9 +95,9 @@ const OfferCard = ({ item, index, navigation }) => {
                 </View>
 
                 {/* CTA Button */}
-                <TouchableOpacity 
+                <TouchableOpacity
                     onPress={() => navigation.navigate(item.route)}
-                    style={styles.ctaButton} 
+                    style={styles.ctaButton}
                     activeOpacity={0.8}
                 >
                     <Text style={styles.ctaText}>Claim Now</Text>
@@ -139,8 +134,8 @@ const Offer = () => {
         <SafeAreaView style={styles.safeArea} edges={['top']}>
             <View style={styles.wrapper}>
                 <HeaderNewUser isShowThis={false} showBack={true} title='Exclusive Offers' />
-                
-                <ScrollView 
+
+                <ScrollView
                     style={styles.mainScroll}
                     contentContainerStyle={styles.mainScrollContent}
                     showsVerticalScrollIndicator={false}

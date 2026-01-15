@@ -604,12 +604,17 @@ const isRideActiveAndSearching = async (rideId) => {
       .select("ride_status driver")
       .lean();
 
-    return ride && ride.ride_status === "searching" && !ride.driver;
+    return (
+      ride &&
+      ["searching", "pre-searching"].includes(ride.ride_status) &&
+      !ride.driver
+    );
   } catch (error) {
     console.error(`Error checking ride status ${rideId}:`, error.message);
     return false;
   }
 };
+
 
 const getRedisClient = (req) => {
   try {
