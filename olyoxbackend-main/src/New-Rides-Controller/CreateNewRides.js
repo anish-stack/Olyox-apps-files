@@ -1277,7 +1277,7 @@ const sendDriverNotification = async (
     };
 
     // Send FCM notification
- const n=   await sendNotification.sendNotification(
+    const n = await sendNotification.sendNotification(
       driver.fcmToken,
       `New Ride Request (#${notificationCount}/3)`,
       isInitial
@@ -1287,7 +1287,7 @@ const sendDriverNotification = async (
       "ride_request_channel"
     );
 
-    console.log("notification send ho rha h "n)
+    console.log("notification send ho rha h ",n)
 
     // Send Socket.IO notification
     if (io) {
@@ -3149,7 +3149,7 @@ exports.ride_status_after_booking_for_drivers = async (req, res) => {
           retryCount: ride.retry_count,
         };
         break;
-         case "pre-searching":
+      case "pre-searching":
         responsePayload.message = "Searching for a driver near you...";
         responsePayload.rideDetails = {
           rideId: ride._id,
