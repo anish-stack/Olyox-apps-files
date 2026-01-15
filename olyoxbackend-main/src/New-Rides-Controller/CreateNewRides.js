@@ -600,20 +600,42 @@ const clearRideNotificationTracking = (rideId) => {
 
 const isRideActiveAndSearching = async (rideId) => {
   try {
+    console.log("🔍 Checking ride status for rideId:", rideId);
+
     const ride = await RideBooking.findById(rideId)
       .select("ride_status driver")
       .lean();
 
-    return (
-      ride &&
-      ["searching", "pre-searching"].includes(ride.ride_status) &&
-      !ride.driver
+    if (!ride) {
+      console.log("❌ Ride not found:", rideId);
+      return false;
+    }
+
+    console.log("📌 Ride status:", ride.ride_status);
+    console.log("🚗 Driver assigned:", !!ride.driver);
+
+    const isSearchingStatus = ["searching", "pre-searching"].includes(
+      ride.ride_status
     );
+    const hasNoDriver = !ride.driver;
+
+    console.log("🟢 Is searching/pre-searching:", isSearchingStatus);
+    console.log("🟢 Has no driver:", hasNoDriver);
+
+    const result = isSearchingStatus && hasNoDriver;
+
+    console.log("✅ Final result:", result);
+
+    return result;
   } catch (error) {
-    console.error(`Error checking ride status ${rideId}:`, error.message);
+    console.error(
+      `🔥 Error checking ride status for ${rideId}:`,
+      error.message
+    );
     return false;
   }
 };
+
 
 
 const getRedisClient = (req) => {
@@ -1255,7 +1277,7 @@ const sendDriverNotification = async (
     };
 
     // Send FCM notification
-    await sendNotification.sendNotification(
+ const n=   await sendNotification.sendNotification(
       driver.fcmToken,
       `New Ride Request (#${notificationCount}/3)`,
       isInitial
@@ -1264,6 +1286,8 @@ const sendDriverNotification = async (
       fcmPayload,
       "ride_request_channel"
     );
+
+    console.log("notification send ho rha h "n)
 
     // Send Socket.IO notification
     if (io) {
@@ -3114,6 +3138,18 @@ exports.ride_status_after_booking_for_drivers = async (req, res) => {
         };
         break;
       case "searching":
+        responsePayload.message = "Searching for a driver near you...";
+        responsePayload.rideDetails = {
+          rideId: ride._id,
+          pickup: ride.pickup_address,
+          drop: ride.drop_address,
+          vehicleType: ride.vehicle_type,
+          pricing: ride.pricing,
+          searchRadius: ride.search_radius,
+          retryCount: ride.retry_count,
+        };
+        break;
+         case "pre-searching":
         responsePayload.message = "Searching for a driver near you...";
         responsePayload.rideDetails = {
           rideId: ride._id,
