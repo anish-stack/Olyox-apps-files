@@ -302,6 +302,15 @@ const CITY_BOUNDARIES = {
       maxLng: 77.5,
     },
   },
+  jaipur: {  // ← YE ADD KARO
+    name: "Jaipur",
+    bounds: {
+      minLat: 26.75,
+      maxLat: 27.05,
+      minLng: 75.65,
+      maxLng: 75.95,
+    },
+  },
   up: {
     name: "Uttar Pradesh (Other)",
     bounds: {
@@ -429,6 +438,14 @@ function checkSpecialTolls(origin, destination, vehicleName = null) {
 
 // Detect city from coordinates (Priority-based detection)
 function detectCity(lat, lng) {
+  if (
+    lat >= CITY_BOUNDARIES.jaipur.bounds.minLat &&
+    lat <= CITY_BOUNDARIES.jaipur.bounds.maxLat &&
+    lng >= CITY_BOUNDARIES.jaipur.bounds.minLng &&
+    lng <= CITY_BOUNDARIES.jaipur.bounds.maxLng
+  ) {
+    return "jaipur";
+  }
   if (
     lat >= CITY_BOUNDARIES.gurgaon.bounds.minLat &&
     lat <= CITY_BOUNDARIES.gurgaon.bounds.maxLat &&
@@ -1084,49 +1101,76 @@ exports.calculateRidePriceForUser = async (req, res) => {
       }
 
       // AUTO SPECIAL RULES
-      if (vehicleName === "auto") {
-        const originCity = detectCity(origin.latitude, origin.longitude);
-        const destCity = detectCity(
-          destination.latitude,
-          destination.longitude
-        );
+   // AUTO SPECIAL RULES
+if (vehicleName === "auto") {
+  const originCity = detectCity(origin.latitude, origin.longitude);
+  const destCity = detectCity(destination.latitude, destination.longitude);
 
-        if (distance_km > 50) {
-          shouldExclude = true;
-          exclusionReasons.push(
-            `distance exceeds 50 km (${distance_km.toFixed(2)} km)`
-          );
-        }
+  let shouldExclude = false;
+  let exclusionReasons = [];
 
-        if (isLater) {
-          shouldExclude = true;
-          exclusionReasons.push("scheduled for later");
-        }
+  // Distance limit: Jaipur mein max 40km allow karo
+  const maxAllowedDistance = originCity === "jaipur" || destCity === "jaipur" ? 40 : 50;
 
-        if (originCity && destCity && originCity !== destCity) {
-          shouldExclude = true;
-          const boundaryInfo = `${
-            CITY_BOUNDARIES[originCity]?.name || originCity
-          } → ${CITY_BOUNDARIES[destCity]?.name || destCity}`;
-          exclusionReasons.push(`cannot cross city boundary (${boundaryInfo})`);
-        }
+  if (distance_km > maxAllowedDistance) {
+    shouldExclude = true;
+    exclusionReasons.push(
+      `distance exceeds ${maxAllowedDistance} km (${distance_km.toFixed(2)} km)`
+    );
+  }
 
-        if (!originCity || !destCity) {
-          shouldExclude = true;
-          exclusionReasons.push("location outside service area");
-        }
+  if (isLater) {
+    shouldExclude = true;
+    exclusionReasons.push("scheduled for later");
+  }
 
-        if (shouldExclude) {
-          excludedVehicles.push({
-            name: vehicle.name,
-            id: vehicle._id,
-            reasons: exclusionReasons,
-          });
-        } else {
-          filteredVehicles.push(vehicle);
-        }
-        continue;
-      }
+  // Jaipur ke andar ya Jaipur se Jaipur tak → allow
+  // Jaipur se bahar → cross-city → block
+  if (originCity && destCity && originCity !== destCity) {
+    const isJaipurInvolved = originCity === "jaipur" || destCity === "jaipur";
+    
+    if (isJaipurInvolved && (originCity === "jaipur" && destCity !== "jaipur")) {
+      // Jaipur se bahar ja rahe ho → block
+      shouldExclude = true;
+      exclusionReasons.push(`Auto cannot go outside Jaipur city`);
+    } else if (!isJaipurInvolved) {
+      // Normal cross-city (Delhi-Gurgaon etc) → block as before
+      shouldExclude = true;
+      exclusionReasons.push(`cannot cross city boundary (${originCity} → ${destCity})`);
+    }
+    // Jaipur ke andar → allow (already handled by originCity === destCity === "jaipur")
+  }
+
+  // Agar koi city detect nahi hui aur Jaipur ke bounds mein hai → manually allow
+  if (!originCity && !destCity) {
+    // Check if origin or destination is in Jaipur bounds
+    const isInJaipur = 
+      (origin.latitude >= 26.75 && origin.latitude <= 27.05 && 
+       origin.longitude >= 75.65 && origin.longitude <= 75.95) ||
+      (destination.latitude >= 26.75 && destination.latitude <= 27.05 && 
+       destination.longitude >= 75.65 && destination.longitude <= 75.95);
+
+    if (isInJaipur && distance_km <= 40) {
+      // Allow auto in Jaipur even if city detection failed
+      filteredVehicles.push(vehicle);
+      continue;
+    } else {
+      shouldExclude = true;
+      exclusionReasons.push("location outside service area");
+    }
+  }
+
+  if (shouldExclude) {
+    excludedVehicles.push({
+      name: vehicle.name,
+      id: vehicle._id,
+      reasons: exclusionReasons,
+    });
+  } else {
+    filteredVehicles.push(vehicle);
+  }
+  continue;
+}
 
       // OTHER VEHICLES - Always included
       filteredVehicles.push(vehicle);
